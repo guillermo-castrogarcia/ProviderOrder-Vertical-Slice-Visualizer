@@ -1,0 +1,675 @@
+root = true
+#################
+# Common Settings
+#################
+
+# This file is the top-most EditorConfig file
+
+# All Files
+[*]
+charset = utf-8
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+insert_final_newline = false
+trim_trailing_whitespace = true
+max_line_length = 200
+
+#####################################
+# Resharper Rules (not in global.config) $
+#####################################
+
+# .Net naming rule extensions for resharper/rider
+dotnet_naming_rule.private_constants_rule.import_to_resharper = as_predefined
+dotnet_naming_rule.private_constants_rule.severity = warning
+dotnet_naming_rule.private_constants_rule.style = upper_camel_case_style
+dotnet_naming_rule.private_constants_rule.symbols = private_constants_symbols
+dotnet_naming_rule.private_instance_fields_rule.import_to_resharper = as_predefined
+dotnet_naming_rule.private_instance_fields_rule.severity = warning
+dotnet_naming_rule.private_instance_fields_rule.style = lower_camel_case_style
+dotnet_naming_rule.private_instance_fields_rule.symbols = private_instance_fields_symbols
+dotnet_naming_rule.private_static_fields_rule.import_to_resharper = as_predefined
+dotnet_naming_rule.private_static_fields_rule.severity = warning
+dotnet_naming_rule.private_static_fields_rule.style = lower_camel_case_style
+dotnet_naming_rule.private_static_fields_rule.symbols = private_static_fields_symbols
+dotnet_naming_rule.private_static_readonly_rule.import_to_resharper = as_predefined
+dotnet_naming_rule.private_static_readonly_rule.severity = warning
+dotnet_naming_rule.private_static_readonly_rule.style = upper_camel_case_style
+dotnet_naming_rule.private_static_readonly_rule.symbols = private_static_readonly_symbols
+dotnet_naming_style.lower_camel_case_style.capitalization = camel_case
+dotnet_naming_style.upper_camel_case_style.capitalization = pascal_case
+dotnet_naming_symbols.private_constants_symbols.applicable_accessibilities = private
+dotnet_naming_symbols.private_constants_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_constants_symbols.required_modifiers = const
+dotnet_naming_symbols.private_instance_fields_symbols.applicable_accessibilities = private
+dotnet_naming_symbols.private_instance_fields_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields_symbols.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields_symbols.required_modifiers = static
+dotnet_naming_symbols.private_static_readonly_symbols.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_symbols.required_modifiers = static,readonly
+
+# ReSharper properties
+resharper_annotation_redundancy_in_hierarchy_highlighting = do_not_show
+resharper_convert_to_using_declaration_highlighting = do_not_show
+
+resharper_arguments_literal = named
+resharper_autodetect_indent_settings = true
+resharper_blank_lines_after_multiline_statements = 1
+resharper_blank_lines_around_single_line_auto_property = 1
+resharper_csharp_wrap_after_declaration_lpar = true
+resharper_csharp_wrap_after_invocation_lpar = true
+resharper_csharp_wrap_arguments_style = chop_if_long
+resharper_csharp_wrap_before_binary_opsign = true
+resharper_csharp_wrap_parameters_style = chop_if_long
+resharper_enforce_line_ending_style = true
+resharper_use_indent_from_vs = false
+resharper_wrap_chained_binary_expressions = chop_if_long
+resharper_wrap_chained_method_calls = chop_if_long
+resharper_nested_ternary_style = expanded
+resharper_align_multiline_binary_expressions_chain = false
+resharper_csharp_keep_blank_lines_in_code = 1
+resharper_csharp_keep_blank_lines_in_declarations = 1
+resharper_keep_existing_invocation_parens_arrangement = false
+resharper_braces_for_for = required
+resharper_braces_for_foreach = required
+resharper_braces_for_ifelse = required
+resharper_braces_for_while = required
+resharper_braces_redundant = false
+resharper_wrap_array_initializer_style = chop_always
+resharper_wrap_object_and_collection_initializer_style = chop_always
+resharper_wrap_lines = true
+
+
+# ReSharper inspection severities
+# to find the right one, see here: https://www.jetbrains.com/help/resharper/Reference__Code_Inspections_CSHARP.html
+resharper_arrange_this_qualifier_highlighting = none
+resharper_arrange_redundant_parentheses_highlighting = hint
+resharper_arrange_type_member_modifiers_highlighting = hint
+resharper_arrange_type_modifiers_highlighting = hint
+resharper_built_in_type_reference_style_for_member_access_highlighting = hint
+resharper_built_in_type_reference_style_highlighting = hint
+resharper_enforce_do_while_statement_braces_highlighting = hint
+resharper_enforce_fixed_statement_braces_highlighting = hint
+resharper_enforce_foreach_statement_braces_highlighting = hint
+resharper_enforce_for_statement_braces_highlighting = hint
+resharper_enforce_if_statement_braces_highlighting = hint
+resharper_enforce_lock_statement_braces_highlighting = hint
+resharper_enforce_using_statement_braces_highlighting = hint
+resharper_enforce_while_statement_braces_highlighting = hint
+resharper_parameter_type_can_be_enumerable_local_highlighting = none
+resharper_redundant_anonymous_type_property_name_highlighting = hint
+resharper_non_readonly_member_in_get_hash_code_highlighting = none
+resharper_redundant_argument_default_value_highlighting = hint
+resharper_suggest_var_or_type_built_in_types_highlighting = hint
+resharper_suggest_var_or_type_elsewhere_highlighting = hint
+resharper_suggest_var_or_type_simple_types_highlighting = hint
+resharper_redundant_explicit_tuple_component_name_highlighting = none
+
+#####################################
+# Microsoft.CodeAnalysis.NetAnalyzers #
+#####################################
+
+# Rule CA1027: Mark enums with FlagsAttribute
+dotnet_diagnostic.CA1027.severity=warning
+
+# Rule CA1052: Static holder types should be Static or NotInheritable
+dotnet_diagnostic.CA1052.severity=warning
+
+# Rule CA1054: URI-like parameters should not be strings
+dotnet_diagnostic.CA1054.severity=none
+
+# Rule CA1056: URI-like properties should not be strings
+dotnet_diagnostic.CA1056.severity=none
+
+# Rule CA1308: Normalize strings to uppercase
+dotnet_diagnostic.CA1308.severity=warning
+
+# Rule CA1716: Identifiers should not match keywords
+dotnet_diagnostic.CA1716.severity=none
+
+# Rule CA1724: Type names should not match namespaces
+dotnet_diagnostic.CA1724.severity=none
+
+# Rule CA1826: Do not use Enumerable methods on indexable collections
+dotnet_diagnostic.CA1826.severity=warning
+
+# Rule CA2234: Pass system uri objects instead of strings
+dotnet_diagnostic.CA2234.severity=warning
+
+#####################
+# SonarAnalyzer.CSharp #
+#####################
+
+# Rule S103: Lines should not be too long
+dotnet_diagnostic.S103.severity = warning
+
+# Rule S107: Methods should not have too many parameters
+dotnet_diagnostic.S107.severity = none
+
+# Rule S1134: Track uses of "FIXME" tags
+dotnet_diagnostic.S1134.severity = none
+
+# Rule S1481: Unused local variables should be removed
+dotnet_diagnostic.S1481.severity = warning
+
+# Rule S1698: "==" should not be used when "Equals" is overridden
+dotnet_diagnostic.S1698.severity = none
+
+# Rule S2699: Tests should include assertions
+dotnet_diagnostic.S2699.severity = none
+
+# Rule S3260: Private classes or records which are not derived in the current assembly should be marked as 'sealed'.
+dotnet_diagnostic.S3260.severity = none
+
+# Rule S3881: "IDisposable" should be implemented correctly
+dotnet_diagnostic.S3881.severity = warning
+
+# Rule S4039: Interface methods should be callable by derived types
+dotnet_diagnostic.S4039.severity = none
+
+# Rule S3267: Loops should be simplified with "LINQ" expressions
+dotnet_diagnostic.S3267.severity = none
+
+# Rule S3059: Types should not have members with visibility set higher than the type's visibility
+dotnet_diagnostic.S3059.severity = suggestion
+
+# Rule S3260: Non-derived "private" classes should be "sealed"
+dotnet_diagnostic.S3260.severity = suggestion
+
+# already disabled in globalconfig, but rider doesn't get it
+# Rule S4457: Parameter validation in "async"/"await" methods should be wrapped
+dotnet_diagnostic.S4457.severity = none
+
+# Rule S2743: Static fields should not be used in generic types
+dotnet_diagnostic.S2743.severity = none
+
+# Rule S3875: "operator==" should not be overloaded on reference types
+dotnet_diagnostic.S3875.severity = none
+
+# Rule S3241: Methods should not return values that are never used
+dotnet_diagnostic.S3241.severity = none
+
+##########
+# IDE Rules #
+##########
+
+# Rule IDE0007: 'var' preferences
+dotnet_diagnostic.IDE0007.severity = warning
+
+# Rule IDE0008: 'var' preferences
+dotnet_diagnostic.IDE0008.severity = suggestion
+# options for IDE0007 and IDE0008
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# Rule IDE0016: Use throw expression
+csharp_style_throw_expression = true:warning
+
+# Rule IDE0017: Use object initializers
+dotnet_style_object_initializer = true:warning
+
+# Rule IDE0028: Use collection initializers
+dotnet_style_collection_initializer = true:warning
+
+# Rule IDE0037: Redundant tuple name declaration
+dotnet_diagnostic.IDE0037.severity = none
+# options
+dotnet_style_prefer_inferred_tuple_names = false:none
+dotnet_style_prefer_inferred_anonymous_type_member_names = false:none
+
+# Rule IDE0039: Use local function instead of lambda
+csharp_style_pattern_local_over_anonymous_function = true:warning
+
+# Rule IDE0041: Use is null check
+dotnet_diagnostic.IDE0041.severity = suggestion
+# options
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:suggestion
+
+# Rule IDE0045: Use conditional expressions for assignment
+dotnet_style_prefer_conditional_expression_over_assignment = false:suggestion
+
+# Rule IDE0046: Use conditional expressions for return
+dotnet_style_prefer_conditional_expression_over_return = false:suggestion
+
+# Rule IDE0047: &nbsp;Parentheses preferences
+dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:warning
+dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:warning
+
+# Rule IDE0055: Use formatting rules (configured as WarningNotAsErrors)
+dotnet_diagnostic.IDE0055.severity = warning
+csharp_new_line_before_members_in_anonymous_types = false
+
+# Rule IDE0060: Remove unused parameters -> same as CA1801
+dotnet_diagnostic.IDE0060.severity = none
+
+# Rule IDE0065: 'using' directive placement
+dotnet_diagnostic.IDE0065.severity = none
+csharp_using_directive_placement = inside_namespace:silent
+
+#####################
+# IDisposableAnalyzers #
+# Examples for each rule can be found here:
+# https://github.com/DotNetAnalyzers/IDisposableAnalyzers
+#####################
+
+# Rule IDISP001: Dispose created
+dotnet_diagnostic.idisp001.severity = Error
+
+# Rule IDISP002: Dispose member
+dotnet_diagnostic.idisp002.severity = Error
+
+# Rule IDISP003: Dispose previous before re-assigning
+dotnet_diagnostic.idisp003.severity = None
+
+# Rule IDISP004: Don't ignore created IDisposable
+dotnet_diagnostic.idisp004.severity = None
+
+# Rule IDISP005: Return type should indicate that the value should be disposed
+dotnet_diagnostic.idisp005.severity = None
+
+# Rule IDISP006: Implement IDisposable
+dotnet_diagnostic.idisp006.severity = Error
+
+# Rule IDISP007: Don't dispose injected
+dotnet_diagnostic.idisp007.severity = None
+
+# Rule IDISP008: Don't assign member with injected and created disposables
+dotnet_diagnostic.idisp008.severity = None
+
+# Rule IDISP009: Add IDisposable interface
+dotnet_diagnostic.idisp009.severity = None
+
+# Rule IDISP010: Call base.Dispose(disposing)
+dotnet_diagnostic.idisp010.severity = None
+
+# Rule IDISP011: Don't return disposed instance
+dotnet_diagnostic.idisp011.severity = None
+
+# Rule IDISP012: Property should not return created disposable
+dotnet_diagnostic.idisp012.severity = None
+
+# Rule IDISP013: Await in using
+dotnet_diagnostic.idisp013.severity = None
+
+# Rule IDISP014: Use a single instance of HttpClient
+dotnet_diagnostic.idisp014.severity = None
+
+# Rule IDISP015: Member should not return created and cached instance
+dotnet_diagnostic.idisp015.severity = None
+
+# Rule IDISP016: Don't use disposed instance
+dotnet_diagnostic.idisp016.severity = None
+
+# Rule IDISP017: Prefer using
+dotnet_diagnostic.idisp017.severity = None
+
+# Rule IDISP018: Call SuppressFinalize
+dotnet_diagnostic.idisp018.severity = None
+
+# Rule IDISP019: Call SuppressFinalize
+dotnet_diagnostic.idisp019.severity = None
+
+# Rule IDISP020: Call SuppressFinalize(this)
+dotnet_diagnostic.idisp020.severity = None
+
+# Rule IDISP021: Call this.Dispose(true)
+dotnet_diagnostic.idisp021.severity = None
+
+# Rule IDISP022: Call this.Dispose(false)
+dotnet_diagnostic.idisp022.severity = None
+
+# Rule IDISP023: Don't use reference types in finalizer context
+dotnet_diagnostic.idisp023.severity = None
+
+# Rule IDISP024: Don't call GC.SuppressFinalize(this) when the type is sealed and has no finalizer
+dotnet_diagnostic.idisp024.severity = None
+
+# Rule IDISP025: Class with no virtual dispose method should be sealed
+dotnet_diagnostic.idisp025.severity = None
+
+##########
+# StyleCop #
+##########
+
+# Rule SA1606: Documentation missing
+dotnet_diagnostic.SA1606.severity = suggestion
+
+# Rule SA1618: Documentation missing
+dotnet_diagnostic.SA1618.severity = suggestion
+
+# Rule SA1623: PropertySummaryDocumentationMustMatchAccessors
+dotnet_diagnostic.SA1623.severity = suggestion
+
+# Rule SA1649: File name should match first type name
+dotnet_diagnostic.SA1649.severity = none
+
+# Rule SA1135: A using directive is not qualified.
+dotnet_diagnostic.SA1135.severity = none
+
+# Rule SA1614: A <param> tag within a C# element's documentation header is empty.
+dotnet_diagnostic.SA1614.severity = suggestion
+
+# Rule SA1616: The <returns> tag within a C# element's documentation header is empty.
+dotnet_diagnostic.SA1616.severity = suggestion
+
+# Rule SA1202: 'public' members should come before 'private' members
+dotnet_diagnostic.SA1202.severity = suggestion
+
+# Rule SA1303: Const field names should begin with upper-case letter
+dotnet_diagnostic.SA1303.severity = none
+
+# Rule SA1512: Single-line comments should not be followed by blank line
+dotnet_diagnostic.SA1512.severity = none
+
+# Rule SA1024: Colon should be followed by a space
+dotnet_diagnostic.SA1024.severity = none
+
+
+
+# other rules (see https://github.com/DotNetAnalyzers/StyleCopAnalyzers/tree/master/documentation)
+
+dotnet_diagnostic.SA0002.severity = suggestion
+dotnet_diagnostic.SA1000.severity = suggestion
+dotnet_diagnostic.SA1001.severity = suggestion
+dotnet_diagnostic.SA1002.severity = suggestion
+dotnet_diagnostic.SA1003.severity = suggestion
+dotnet_diagnostic.SA1004.severity = suggestion
+dotnet_diagnostic.SA1005.severity = suggestion
+dotnet_diagnostic.SA1006.severity = suggestion
+dotnet_diagnostic.SA1007.severity = suggestion
+dotnet_diagnostic.SA1008.severity = suggestion
+dotnet_diagnostic.SA1009.severity = suggestion
+dotnet_diagnostic.SA1010.severity = suggestion
+dotnet_diagnostic.SA1011.severity = suggestion
+dotnet_diagnostic.SA1012.severity = suggestion
+dotnet_diagnostic.SA1013.severity = suggestion
+dotnet_diagnostic.SA1014.severity = suggestion
+dotnet_diagnostic.SA1015.severity = suggestion
+dotnet_diagnostic.SA1016.severity = suggestion
+dotnet_diagnostic.SA1017.severity = suggestion
+dotnet_diagnostic.SA1018.severity = suggestion
+dotnet_diagnostic.SA1019.severity = suggestion
+dotnet_diagnostic.SA1020.severity = suggestion
+dotnet_diagnostic.SA1021.severity = suggestion
+dotnet_diagnostic.SA1022.severity = suggestion
+dotnet_diagnostic.SA1023.severity = suggestion
+dotnet_diagnostic.SA1025.severity = suggestion
+dotnet_diagnostic.SA1026.severity = suggestion
+dotnet_diagnostic.SA1027.severity = suggestion
+dotnet_diagnostic.SA1028.severity = suggestion
+dotnet_diagnostic.SA1100.severity = suggestion
+
+dotnet_diagnostic.SA1102.severity = suggestion
+dotnet_diagnostic.SA1103.severity = suggestion
+dotnet_diagnostic.SA1104.severity = suggestion
+dotnet_diagnostic.SA1105.severity = suggestion
+dotnet_diagnostic.SA1106.severity = suggestion
+dotnet_diagnostic.SA1107.severity = suggestion
+dotnet_diagnostic.SA1108.severity = suggestion
+dotnet_diagnostic.SA1110.severity = suggestion
+dotnet_diagnostic.SA1111.severity = suggestion
+dotnet_diagnostic.SA1112.severity = suggestion
+dotnet_diagnostic.SA1113.severity = suggestion
+dotnet_diagnostic.SA1114.severity = suggestion
+dotnet_diagnostic.SA1115.severity = suggestion
+
+dotnet_diagnostic.SA1117.severity = suggestion
+
+dotnet_diagnostic.SA1119.severity = suggestion
+dotnet_diagnostic.SA1120.severity = suggestion
+dotnet_diagnostic.SA1121.severity = suggestion
+dotnet_diagnostic.SA1122.severity = suggestion
+dotnet_diagnostic.SA1123.severity = suggestion
+dotnet_diagnostic.SA1124.severity = suggestion
+dotnet_diagnostic.SA1125.severity = suggestion
+dotnet_diagnostic.SA1127.severity = suggestion
+dotnet_diagnostic.SA1128.severity = suggestion
+dotnet_diagnostic.SA1129.severity = suggestion
+dotnet_diagnostic.SA1130.severity = suggestion
+dotnet_diagnostic.SA1131.severity = suggestion
+dotnet_diagnostic.SA1132.severity = suggestion
+dotnet_diagnostic.SA1133.severity = suggestion
+dotnet_diagnostic.SA1134.severity = suggestion
+
+dotnet_diagnostic.SA1136.severity = suggestion
+dotnet_diagnostic.SA1137.severity = suggestion
+dotnet_diagnostic.SA1139.severity = suggestion
+dotnet_diagnostic.SA1141.severity = suggestion
+dotnet_diagnostic.SA1142.severity = suggestion
+
+dotnet_diagnostic.SA1205.severity = suggestion
+dotnet_diagnostic.SA1206.severity = suggestion
+dotnet_diagnostic.SA1207.severity = suggestion
+dotnet_diagnostic.SA1208.severity = suggestion
+dotnet_diagnostic.SA1209.severity = suggestion
+
+dotnet_diagnostic.SA1211.severity = suggestion
+dotnet_diagnostic.SA1212.severity = suggestion
+dotnet_diagnostic.SA1213.severity = suggestion
+dotnet_diagnostic.SA1214.severity = suggestion
+dotnet_diagnostic.SA1216.severity = suggestion
+dotnet_diagnostic.SA1217.severity = suggestion
+dotnet_diagnostic.SA1300.severity = suggestion
+dotnet_diagnostic.SA1301.severity = suggestion
+dotnet_diagnostic.SA1302.severity = suggestion
+
+dotnet_diagnostic.SA1304.severity = suggestion
+dotnet_diagnostic.SA1305.severity = suggestion
+dotnet_diagnostic.SA1306.severity = suggestion
+dotnet_diagnostic.SA1307.severity = suggestion
+dotnet_diagnostic.SA1308.severity = suggestion
+dotnet_diagnostic.SA1309.severity = suggestion
+dotnet_diagnostic.SA1310.severity = suggestion
+dotnet_diagnostic.SA1311.severity = suggestion
+dotnet_diagnostic.SA1312.severity = suggestion
+dotnet_diagnostic.SA1313.severity = suggestion
+dotnet_diagnostic.SA1314.severity = suggestion
+dotnet_diagnostic.SA1316.severity = suggestion
+dotnet_diagnostic.SA1400.severity = suggestion
+dotnet_diagnostic.SA1401.severity = suggestion
+dotnet_diagnostic.SA1402.severity = suggestion
+dotnet_diagnostic.SA1403.severity = suggestion
+dotnet_diagnostic.SA1404.severity = suggestion
+dotnet_diagnostic.SA1405.severity = suggestion
+dotnet_diagnostic.SA1406.severity = suggestion
+dotnet_diagnostic.SA1407.severity = suggestion
+
+dotnet_diagnostic.SA1410.severity = suggestion
+dotnet_diagnostic.SA1411.severity = suggestion
+dotnet_diagnostic.SA1412.severity = suggestion
+
+dotnet_diagnostic.SA1414.severity = suggestion
+dotnet_diagnostic.SA1500.severity = suggestion
+dotnet_diagnostic.SA1501.severity = suggestion
+dotnet_diagnostic.SA1502.severity = suggestion
+dotnet_diagnostic.SA1503.severity = suggestion
+dotnet_diagnostic.SA1504.severity = suggestion
+dotnet_diagnostic.SA1505.severity = suggestion
+dotnet_diagnostic.SA1506.severity = suggestion
+dotnet_diagnostic.SA1507.severity = suggestion
+dotnet_diagnostic.SA1508.severity = suggestion
+dotnet_diagnostic.SA1509.severity = suggestion
+dotnet_diagnostic.SA1510.severity = suggestion
+dotnet_diagnostic.SA1511.severity = suggestion
+
+dotnet_diagnostic.SA1513.severity = suggestion
+dotnet_diagnostic.SA1514.severity = suggestion
+dotnet_diagnostic.SA1515.severity = suggestion
+# Rule SA1516: Elements should be separated by blank line
+dotnet_diagnostic.SA1516.severity = warning
+dotnet_diagnostic.SA1517.severity = suggestion
+dotnet_diagnostic.SA1518.severity = suggestion
+dotnet_diagnostic.SA1519.severity = suggestion
+dotnet_diagnostic.SA1520.severity = suggestion
+
+dotnet_diagnostic.SA1604.severity = suggestion
+dotnet_diagnostic.SA1605.severity = suggestion
+dotnet_diagnostic.SA1607.severity = suggestion
+dotnet_diagnostic.SA1608.severity = suggestion
+dotnet_diagnostic.SA1609.severity = suggestion
+dotnet_diagnostic.SA1610.severity = suggestion
+
+dotnet_diagnostic.SA1612.severity = suggestion
+dotnet_diagnostic.SA1613.severity = suggestion
+
+dotnet_diagnostic.SA1617.severity = suggestion
+dotnet_diagnostic.SA1619.severity = suggestion
+dotnet_diagnostic.SA1620.severity = suggestion
+dotnet_diagnostic.SA1621.severity = suggestion
+dotnet_diagnostic.SA1622.severity = suggestion
+dotnet_diagnostic.SA1624.severity = suggestion
+dotnet_diagnostic.SA1625.severity = suggestion
+dotnet_diagnostic.SA1626.severity = suggestion
+dotnet_diagnostic.SA1627.severity = suggestion
+
+dotnet_diagnostic.SA1629.severity = none
+
+dotnet_diagnostic.SA1634.severity = suggestion
+dotnet_diagnostic.SA1635.severity = suggestion
+dotnet_diagnostic.SA1636.severity = suggestion
+dotnet_diagnostic.SA1637.severity = suggestion
+dotnet_diagnostic.SA1638.severity = suggestion
+dotnet_diagnostic.SA1639.severity = suggestion
+dotnet_diagnostic.SA1640.severity = suggestion
+dotnet_diagnostic.SA1641.severity = suggestion
+
+dotnet_diagnostic.SA1643.severity = suggestion
+dotnet_diagnostic.SA1648.severity = suggestion
+
+dotnet_diagnostic.SA1651.severity = suggestion
+dotnet_diagnostic.SA1652.severity = suggestion
+dotnet_diagnostic.SX1101.severity = suggestion
+
+## disabled rules (from global config)
+# Rule SA0001: All diagnostics of XML documentation comments has been disabled due to the current project configuration.
+dotnet_diagnostic.SA0001.severity = none
+
+# Rule SA1101: A call to an instance member of the local class or a base class is not prefixed with 'this.', within a C# code file.
+dotnet_diagnostic.SA1101.severity = none
+
+# Rule SA1116: The parameters to a C# method or indexer call or declaration span across multiple lines, but the first parameter does not start on the line after the opening bracket.
+dotnet_diagnostic.SA1116.severity = none
+
+# Rule SA1118: A parameter to a C# method or indexer, other than the first parameter, spans across multiple lines.
+dotnet_diagnostic.SA1118.severity = none
+
+# Rule SA1200: A C# using directive is placed outside of a namespace element.
+dotnet_diagnostic.SA1200.severity = none
+
+# Rule SA1201: An element within a C# code file is out of order in relation to the other elements in the code.
+dotnet_diagnostic.SA1201.severity = none
+
+# Rule SA1203: A constant field is placed beneath a non-constant field.
+dotnet_diagnostic.SA1203.severity = none
+
+# Rule SA1204: A static element is positioned beneath an instance element of the same type.
+dotnet_diagnostic.SA1204.severity = none
+
+# Rule SA1210: The using directives within a C# code file are not sorted alphabetically by namespace.
+dotnet_diagnostic.SA1210.severity = none
+
+# Rule SA1408: A C# statement contains a complex conditional expression which omits parenthesis around operators.
+dotnet_diagnostic.SA1408.severity = none
+
+# Rule SA1413: The last statement in a multi-line C# initializer or list is missing a trailing comma.
+dotnet_diagnostic.SA1413.severity = none
+
+# Rule SA1600: A C# code element is missing a documentation header.
+dotnet_diagnostic.SA1600.severity = none
+
+# Rule SA1601: A C# partial element is missing a documentation header.
+dotnet_diagnostic.SA1601.severity = none
+
+# Rule SA1602: An item within a C# enumeration is missing an Xml documentation header.
+dotnet_diagnostic.SA1602.severity = none
+
+# Rule SA1611: A C# method, constructor, delegate or indexer element is missing documentation for one or more of its parameters.
+dotnet_diagnostic.SA1611.severity = none
+
+# Rule SA1615: A C# element is missing documentation for its return value.
+dotnet_diagnostic.SA1615.severity = none
+
+# Rule SA1629: A section of the Xml header documentation for a C# element does not end with a period (also known as a full stop).
+dotnet_diagnostic.SA1629.severity = none
+
+# Rule SA1633: A C# code file is missing a standard file header.
+dotnet_diagnostic.SA1633.severity = none
+
+# Rule SA1642: The XML documentation header for a C# constructor does not contain the appropriate summary text.
+dotnet_diagnostic.SA1642.severity = none
+
+# Rule SA1649: File name should match first type name
+dotnet_diagnostic.SA1649.severity = none
+
+# Rule SX1309: This rule is a non-standard extension to the default StyleCop behavior, and represents an alternative style which is adopted by some projects. Alternative rules are known to directly conflict with standard StyleCop rules.
+dotnet_diagnostic.SX1309.severity = none
+
+# Rule SX1309S: This rule is a non-standard extension to the default StyleCop behavior, and represents an alternative style which is adopted by some projects. Alternative rules are known to directly conflict with standard StyleCop rules.
+dotnet_diagnostic.SX1309S.severity = none
+
+# Rule SA1135: A using directive is not qualified.
+dotnet_diagnostic.SA1135.severity = none
+
+# Rule SA1614: A <param> tag within a C# element's documentation header is empty.
+dotnet_diagnostic.SA1614.severity = none
+
+# Rule SA1616: The <returns> tag within a C# element's documentation header is empty.
+dotnet_diagnostic.SA1616.severity = none
+
+# Rule SA1202: 'public' members should come before 'private' members
+dotnet_diagnostic.SA1202.severity = none
+
+# Rule SA1303: Const field names should begin with upper-case letter
+dotnet_diagnostic.SA1303.severity = none
+
+# Rule SA1512: Single-line comments should not be followed by blank line
+dotnet_diagnostic.SA1512.severity = none
+
+#########################
+# File Extension Settings
+#########################
+
+# Visual Studio Solution Files
+[*.sln]
+indent_style = tab
+
+# Visual Studio XML Project Files
+[*.{csproj,vbproj,vcxproj,vcxproj.filters,proj,projitems,shproj}]
+indent_size = 2
+
+# XML Configuration Files
+[*.{xml,config,props,targets,nuspec,resx,ruleset,vsixmanifest,vsct}]
+indent_size = 2
+
+# JSON Files
+[*.{json,json5}]
+indent_size = 2
+
+# YAML Files
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown Files
+[*.md]
+trim_trailing_whitespace = false
+
+# Web Files
+[*.{htm,html,js,ts,tsx,css,sass,scss,less,vue}]
+indent_size = 2
+insert_final_newline = true
+
+[{.babelrc,.stylelintrc,.eslintrc,*.uplugin,*.bowerrc,*.jsb3,*.jsb2,*.cql,*.ddl,*.sql}]
+indent_size = 2
+
+[*.{appxmanifest,asax,ascx,aspx,axaml,build,cg,cginc,compute,cs,cshtml,dtd,fs,fsi,fsscript,fsx,hlsl,hlsli,hlslinc,master,ml,mli,paml,razor,resw,shader,skin,usf,ush,vb,xaml,xamlx,xoml,xsd}]
+tab_width = 4
+
+[*.avdl]
+indent_style = tab
+tab_width = 4
+
+[*.avsc]
+indent_size = 2

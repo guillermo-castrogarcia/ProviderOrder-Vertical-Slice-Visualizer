@@ -1,0 +1,3 @@
+using Dg.ProviderOrder.Mokumentation.ArchitectureBricks;
+
+internal sealed record MarinatorOrMediatorRequestHandlerAndCall(MediatrRequestHandler MediatrRequestHandler, MediatorCall MarinatorCall);

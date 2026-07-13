@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Dg.ProviderOrder.Mockumentation.Viewer</RootNamespace>
+        <!-- Set to false to skip building the React client (e.g. when wwwroot is already built/committed). -->
+        <BuildClientApp Condition="'$(BuildClientApp)' == ''">true</BuildClientApp>
+    </PropertyGroup>
+
+    <!-- Build the Vite/React client into wwwroot as part of a normal `dotnet build`/`dotnet run`.
+         Requires Node.js + npm on PATH. Disable with -p:BuildClientApp=false. -->
+    <Target Name="BuildClientApp" BeforeTargets="BeforeBuild" Condition="'$(BuildClientApp)' == 'true'">
+        <Message Importance="high" Text="Building React client (ClientApp)..." />
+        <Exec Command="npm install" WorkingDirectory="ClientApp" Condition="!Exists('ClientApp/node_modules')" />
+        <Exec Command="npm run build" WorkingDirectory="ClientApp" />
+    </Target>
+
+    <ItemGroup>
+        <!-- Client source & build artifacts must not be compiled/watched by the .NET build. -->
+        <Content Remove="ClientApp/**" />
+        <None Remove="ClientApp/**" />
+        <Compile Remove="ClientApp/**" />
+    </ItemGroup>
+
+</Project>
