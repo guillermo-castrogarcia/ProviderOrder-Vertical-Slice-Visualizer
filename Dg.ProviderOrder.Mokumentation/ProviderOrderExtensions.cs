@@ -20,46 +20,72 @@ public static class ProviderOrderExtensions
     public static string GetName(this ProviderOrderProduct? providerOrderProduct) => providerOrderProduct?.ToString() ?? "Other";
     public static ProviderOrderProduct? FindProviderOrderProduct(this FullName fullName)
     {
-        if (fullName.Value.Contains("OrderCreation"))
+        // The product is the feature folder — the namespace segment right after ".Commands." / ".Queries.".
+        // Matching only that segment (not the whole name) prevents a product keyword that appears deeper in
+        // the name from winning: e.g. "...Commands.Cancellation.MandatorCancellation.InvoicedButNotDelivered
+        // Cleanup..." is Cancellation, not ProviderInvoice.
+        var scope = ProductScope(fullName.Value);
+
+        if (scope.Contains("OrderCreation"))
         {
             return ProviderOrderProduct.OrderCreation;
         }
 
-        if (fullName.Value.Contains("OrderExport"))
+        if (scope.Contains("OrderExport"))
         {
             return ProviderOrderProduct.OrderExport;
         }
 
-        if (fullName.Value.Contains("ProviderResponse"))
+        if (scope.Contains("ProviderResponse"))
         {
             return ProviderOrderProduct.ProviderResponse;
         }
 
-        if (fullName.Value.Contains("ProviderDelivery"))
+        if (scope.Contains("ProviderDelivery"))
         {
             return ProviderOrderProduct.ProviderDelivery;
         }
 
-        if (fullName.Value.Contains("Invoice"))
+        if (scope.Contains("Invoice"))
         {
             return ProviderOrderProduct.ProviderInvoice;
         }
 
-        if (fullName.Value.Contains("CustomerReturn"))
+        if (scope.Contains("Return"))
         {
             return ProviderOrderProduct.Returns;
         }
 
-        if (fullName.Value.Contains("Cancellation"))
+        if (scope.Contains("Cancellation"))
         {
             return ProviderOrderProduct.Cancellation;
         }
-        if (fullName.Value.Contains("ProviderRuling"))
+        if (scope.Contains("ProviderRuling"))
         {
             return ProviderOrderProduct.ProviderRuling;
         }
 
         return ProviderOrderProduct.Unknown;
+    }
+
+    // Returns the namespace segment immediately after ".Commands." or ".Queries." (the feature folder that
+    // names the product), or the whole value if neither marker is present.
+    private static string ProductScope(string fullNameValue)
+    {
+        foreach (var marker in new[] { ".Commands.", ".Queries." })
+        {
+            var start = fullNameValue.IndexOf(marker, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                continue;
+            }
+
+            start += marker.Length;
+            var end = fullNameValue.IndexOf('.', start);
+            return end < 0 ? fullNameValue[start..] : fullNameValue[start..end];
+        }
+
+        return fullNameValue;
     }
 
     public static ProviderOrderProduct? FindProviderOrderProduct(this VerticalSlice verticalSlice)

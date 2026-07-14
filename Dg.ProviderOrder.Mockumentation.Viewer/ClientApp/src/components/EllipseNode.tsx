@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import type { SliceNodeData } from '../types';
-import { adapterColor, adapterLabel, categoryColor, categoryLabel, sideAccent } from '../theme';
+import { adapterColor, adapterLabel, categoryColor, categoryLabel, nodeOutline } from '../theme';
 import { NODE_H, NODE_W } from '../layout';
 
 type SliceNode = Node<SliceNodeData, 'slice'>;
@@ -53,15 +53,16 @@ export function EllipseNode({ data }: NodeProps<SliceNode>) {
       )}
 
       <svg className="ellipse-bg" width={NODE_W} height={NODE_H}>
-        {/* Fill = adapter category (Web/NServiceBus/Kafka/Other/Mixed); border = application side. */}
+        {/* Fill = adapter category (Web/NServiceBus/Kafka/Other/Mixed). Application side is now shown by
+            the enclosing region box, so the ellipse only carries a neutral outline for definition. */}
         <ellipse
           cx={NODE_W / 2}
           cy={NODE_H / 2}
           rx={NODE_W / 2 - 2}
           ry={NODE_H / 2 - 2}
           fill={categoryColor[data.adapterCategory]}
-          stroke={sideAccent[data.side]}
-          strokeWidth={3}
+          stroke={nodeOutline}
+          strokeWidth={1.5}
         />
       </svg>
 

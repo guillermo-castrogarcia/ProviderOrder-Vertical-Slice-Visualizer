@@ -30,8 +30,11 @@ export const categoryLabel: Record<AdapterCategory, string> = {
   Mixed: 'Mixed adapters',
 };
 
-/** Node border accent by application side, to reinforce the Command/Query grouping. */
+/** Accent per application side. Now carried by the outer region box (Commands / Queries) and the legend. */
 export const sideAccent: Record<Side, string> = {
   Command: '#0ea5e9',
   Query: '#22c55e',
 };
+
+/** Neutral outline for slice ellipses — side is conveyed by the region box, not the node border. */
+export const nodeOutline = 'rgba(226, 232, 240, 0.35)';

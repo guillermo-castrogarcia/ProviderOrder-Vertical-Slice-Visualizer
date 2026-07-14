@@ -189,6 +189,80 @@ input[type='checkbox'] {
   height: 6px;
 }
 
+/* ---- Product bounding box (swimlane) ---- */
+.product-box {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1.5px dashed;
+  border-radius: 12px;
+  /* Non-interactive: never intercept panning or slice dragging. */
+  pointer-events: none;
+}
+.product-box-label {
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+/* ---- Side region box (outer: all Commands / all Queries) ---- */
+.side-box {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 2px solid;
+  border-radius: 18px;
+  pointer-events: none;
+}
+.side-box-label {
+  position: absolute;
+  top: 10px;
+  left: 18px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* ---- Product colour legend (canvas panel) ---- */
+.product-legend {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.78rem;
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  max-height: 60%;
+  overflow-y: auto;
+}
+.product-legend-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+.product-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.12rem 0;
+}
+.product-legend-swatch {
+  width: 16px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px dashed;
+  flex: 0 0 auto;
+}
+
 /* React Flow surface tweaks */
 .react-flow__attribution {
   display: none;

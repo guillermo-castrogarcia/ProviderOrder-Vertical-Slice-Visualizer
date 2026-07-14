@@ -4,6 +4,7 @@ import {
   Controls,
   MarkerType,
   MiniMap,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -11,23 +12,118 @@ import {
   useReactFlow,
   type Edge,
   type Node,
+  type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './App.css';
 
 import { fetchGraph } from './api';
-import { computeLayout } from './layout';
+import { computeLayout, NODE_H, NODE_W } from './layout';
 import { adapterColor, categoryColor, categoryLabel, sideAccent } from './theme';
+import { productBorder, productFill, productIndex } from './products';
 import { EllipseNode } from './components/EllipseNode';
+import { ProductBox } from './components/ProductBox';
+import { SideBox } from './components/SideBox';
 import { PayloadEdge } from './components/PayloadEdge';
 import { CheckboxTree, type SideGroup } from './components/CheckboxTree';
 import type { AdapterCategory, Graph, Side, SliceNodeData } from './types';
 
 type SliceNode = Node<SliceNodeData, 'slice'>;
 
-const nodeTypes = { slice: EllipseNode };
+const nodeTypes = { slice: EllipseNode, productBox: ProductBox, sideBox: SideBox };
 const edgeTypes = { payload: PayloadEdge };
 const SIDES: Side[] = ['Command', 'Query'];
+const SIDE_LABEL: Record<Side, string> = { Command: 'Commands', Query: 'Queries' };
+
+// Inner product box padding, and the larger outer side-box padding (must exceed the product padding so
+// the side box visibly encloses its product boxes; the extra top room seats the "Commands"/"Queries" label).
+const BOX_PAD = 28;
+const BOX_PAD_TOP = 46;
+const SIDE_BOX_PAD = 54;
+const SIDE_BOX_PAD_TOP = 92;
+const isBoxId = (id?: string) => !!id && (id.startsWith('productbox::') || id.startsWith('sidebox::'));
+
+interface Bounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+function extend(map: Map<string, Bounds>, key: string, x: number, y: number): void {
+  const b = map.get(key);
+  if (!b) {
+    map.set(key, { minX: x, minY: y, maxX: x + NODE_W, maxY: y + NODE_H });
+  } else {
+    b.minX = Math.min(b.minX, x);
+    b.minY = Math.min(b.minY, y);
+    b.maxX = Math.max(b.maxX, x + NODE_W);
+    b.maxY = Math.max(b.maxY, y + NODE_H);
+  }
+}
+
+/**
+ * Derives the bounding-box nodes from the CURRENT positions of the visible slice nodes, so the boxes track
+ * live layout — dragging a slice or toggling re-fits them every frame. Two levels: an outer side box per
+ * application side (all Commands / all Queries) and an inner box per (side, product). Side boxes are
+ * emitted first and given the lowest z so they sit behind the product boxes, which sit behind the slices.
+ */
+function computeBoxNodes(sliceNodes: SliceNode[]): Node[] {
+  const sideBounds = new Map<string, Bounds>(); // key: side
+  const productBounds = new Map<string, Bounds>(); // key: `${side}::${product}`
+  for (const n of sliceNodes) {
+    if (n.hidden) continue;
+    const { x, y } = n.position;
+    extend(sideBounds, n.data.side, x, y);
+    extend(productBounds, `${n.data.side}::${n.data.product}`, x, y);
+  }
+
+  const sideBoxes: Node[] = SIDES.filter((s) => sideBounds.has(s)).map((side) => {
+    const b = sideBounds.get(side)!;
+    const width = b.maxX - b.minX + SIDE_BOX_PAD * 2;
+    const height = b.maxY - b.minY + SIDE_BOX_PAD_TOP + SIDE_BOX_PAD;
+    return {
+      id: `sidebox::${side}`,
+      type: 'sideBox',
+      position: { x: b.minX - SIDE_BOX_PAD, y: b.minY - SIDE_BOX_PAD_TOP },
+      width,
+      height,
+      data: { label: SIDE_LABEL[side], border: sideAccent[side] },
+      draggable: false,
+      selectable: false,
+      connectable: false,
+      deletable: false,
+      focusable: false,
+      zIndex: 0, // outermost / behind everything
+      style: { width, height, pointerEvents: 'none' },
+    } satisfies Node;
+  });
+
+  const productBoxes: Node[] = [...productBounds.entries()]
+    .sort((a, b) => productIndex(a[0].split('::')[1]) - productIndex(b[0].split('::')[1]))
+    .map(([key, b]) => {
+      const product = key.split('::')[1];
+      const width = b.maxX - b.minX + BOX_PAD * 2;
+      const height = b.maxY - b.minY + BOX_PAD_TOP + BOX_PAD;
+      return {
+        id: `productbox::${key}`,
+        type: 'productBox',
+        position: { x: b.minX - BOX_PAD, y: b.minY - BOX_PAD_TOP },
+        width,
+        height,
+        data: { product, fill: productFill(product), border: productBorder(product) },
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        deletable: false,
+        focusable: false,
+        zIndex: 1, // between the side boxes (0) and the slices (2)
+        style: { width, height, pointerEvents: 'none' },
+      } satisfies Node;
+    });
+
+  return [...sideBoxes, ...productBoxes];
+}
 
 const keyOf = (side: string, product: string) => `${side}::${product}`;
 
@@ -37,6 +133,7 @@ function buildElements(graph: Graph): { nodes: SliceNode[]; edges: Edge[] } {
     id: n.id,
     type: 'slice',
     position: positions.get(n.id) ?? { x: 0, y: 0 },
+    zIndex: 2, // above both the side boxes (0) and product boxes (1)
     data: {
       label: n.label,
       side: n.side,
@@ -82,6 +179,21 @@ function Flow({ graph }: { graph: Graph }) {
   const { fitView } = useReactFlow();
 
   const tree = useMemo(() => buildTree(graph), [graph]);
+
+  // Product bounding boxes are derived from the live slice positions and rendered behind them, so they
+  // re-fit on every drag and every animation frame. onNodesChange only carries slice-node changes.
+  const boxNodes = useMemo(() => computeBoxNodes(nodes), [nodes]);
+  const rfNodes = useMemo<Node[]>(() => [...boxNodes, ...nodes], [boxNodes, nodes]);
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => onNodesChange(changes.filter((c) => !('id' in c) || !isBoxId(c.id)) as NodeChange<SliceNode>[]),
+    [onNodesChange],
+  );
+
+  // Products present in the graph, in declaration order, for the colour legend.
+  const legendProducts = useMemo(() => {
+    const set = new Set(graph.nodes.map((n) => n.product));
+    return [...set].sort((a, b) => productIndex(a) - productIndex(b) || a.localeCompare(b));
+  }, [graph]);
 
   // Latest node list + running animation frame + previously-hidden set, read synchronously by animateLayout.
   const nodesRef = useRef<SliceNode[]>([]);
@@ -248,11 +360,11 @@ function Flow({ graph }: { graph: Graph }) {
 
         <main className="canvas">
           <ReactFlow
-            nodes={nodes}
+            nodes={rfNodes}
             edges={edges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
-            onNodesChange={onNodesChange}
+            onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             fitView
             minZoom={0.05}
@@ -263,6 +375,18 @@ function Flow({ graph }: { graph: Graph }) {
             <Background gap={24} />
             <MiniMap pannable zoomable nodeStrokeWidth={3} />
             <Controls />
+            <Panel position="top-left" className="product-legend">
+              <div className="product-legend-title">Products</div>
+              {legendProducts.map((p) => (
+                <div className="product-legend-item" key={p}>
+                  <span
+                    className="product-legend-swatch"
+                    style={{ background: productFill(p), borderColor: productBorder(p) }}
+                  />
+                  {p}
+                </div>
+              ))}
+            </Panel>
           </ReactFlow>
         </main>
       </div>
