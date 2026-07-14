@@ -5,8 +5,7 @@ using Microsoft.CodeAnalysis;
 public record PrimaryPort(
     NamedTypeSymbol ImplementationClass,
     NamedMethodSymbol ImplementationMethod,
-    PrimaryPortType PrimaryPortType,
-    VersionControlInfo? VersionControlInfo = null)
+    PrimaryPortType PrimaryPortType)
 {
     public FullName FullName => this.ImplementationClass.FullName;
 

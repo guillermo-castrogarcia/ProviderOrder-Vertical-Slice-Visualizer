@@ -46,8 +46,7 @@ internal partial class Program
                                     yield return new PrimaryPort(
                                         classSymbol.ToNamedTypeSymbol(),
                                         method.ToNamedMethodSymbol(),
-                                        PrimaryPortType.MonolithApplicationService,
-                                        VersionControlInfo: AzureDevOpsVersionControlInfo.Create(document, repository));
+                                        PrimaryPortType.MonolithApplicationService);
                                 }
 
                                 foreach (var implicitInterfaceImplementation in interfaceDeclarationMethods.Where(m => m.IsImplementedBy(method)))
@@ -55,8 +54,7 @@ internal partial class Program
                                     yield return new PrimaryPort(
                                         classSymbol.ToNamedTypeSymbol(),
                                         method.ToNamedMethodSymbol(),
-                                        PrimaryPortType.MonolithApplicationService,
-                                        VersionControlInfo: AzureDevOpsVersionControlInfo.Create(document, repository));
+                                        PrimaryPortType.MonolithApplicationService);
                                 }
                             }
                         }

@@ -5,5 +5,4 @@ public sealed record MediatrRequestHandler(
     NamedTypeSymbol ImplementationClass,
     NamedMethodSymbol ImplementationMethod,
     NamedTypeSymbol RequestType,
-    PrimaryPortType PrimaryPortType,
-    VersionControlInfo? VersionControlInfo = null) : PrimaryPort(ImplementationClass, ImplementationMethod, PrimaryPortType, VersionControlInfo);
+    PrimaryPortType PrimaryPortType) : PrimaryPort(ImplementationClass, ImplementationMethod, PrimaryPortType);

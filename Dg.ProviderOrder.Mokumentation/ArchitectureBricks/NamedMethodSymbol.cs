@@ -4,9 +4,13 @@
 public sealed record NamedMethodSymbol(
     string Name,
     FullName FullName,
-    MethodSignature Signature)
+    MethodSignature Signature,
+    SourceLocation? SourceLocation = null)
 {
     public string FullNameValue => FullName.Value;
+
+    // Equals/GetHashCode below are hand-written over Name/FullName/Signature, so the added
+    // SourceLocation is naturally excluded from identity — no change needed there.
 
     public bool Equals(NamedMethodSymbol? other)
     {

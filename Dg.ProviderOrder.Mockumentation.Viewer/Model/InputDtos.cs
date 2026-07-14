@@ -16,6 +16,17 @@ public sealed class NamedSymbolDto
 {
     public string Name { get; set; } = string.Empty;
     public FullNameDto FullName { get; set; } = new();
+
+    /// <summary>Link back to the source that defines this symbol; null when it has no source (e.g. types from a referenced package).</summary>
+    public SourceLocationDto? SourceLocation { get; set; }
+}
+
+/// <summary>A repo-relative source path + 1-based line range. Combined with the file's SourceRepositoryDto it yields a commit-pinned GitHub blob URL.</summary>
+public sealed class SourceLocationDto
+{
+    public string Path { get; set; } = string.Empty;
+    public int StartLine { get; set; }
+    public int EndLine { get; set; }
 }
 
 public sealed class PrimaryAdapterDto
@@ -68,4 +79,23 @@ public sealed class VerticalSliceDto
     public List<WebApiServiceClientCallDto> WebApiServiceClientCalls { get; set; } = [];
 
     public string Id => PrimaryPort.FullName.Value;
+}
+
+/// <summary>The source repository/commit a *.verticalslices.json was extracted from, held once per file.</summary>
+public sealed class SourceRepositoryDto
+{
+    public string RemoteBaseUrl { get; set; } = string.Empty;
+    public string CommitSha { get; set; } = string.Empty;
+    public string BranchName { get; set; } = string.Empty;
+
+    /// <summary>Composes the commit-pinned GitHub blob URL for a source location.</summary>
+    public string BlobUrl(SourceLocationDto location) =>
+        $"{RemoteBaseUrl}/blob/{CommitSha}/{location.Path}#L{location.StartLine}-L{location.EndLine}";
+}
+
+/// <summary>Top-level shape of a *.verticalslices.json file: the repository header plus the extracted slices.</summary>
+public sealed class VerticalSliceExtractDto
+{
+    public SourceRepositoryDto Repository { get; set; } = new();
+    public List<VerticalSliceDto> Slices { get; set; } = [];
 }

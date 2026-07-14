@@ -161,7 +161,17 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
                 {
                     logger.LogWarning("Skipped {Count} junk byte(s) before JSON in {Path}", start, path);
                 }
-                slices = JsonSerializer.Deserialize<List<VerticalSliceDto>>(bytes.AsSpan(start), JsonOptions);
+                var extract = JsonSerializer.Deserialize<VerticalSliceExtractDto>(bytes.AsSpan(start), JsonOptions);
+                slices = extract?.Slices;
+                if (extract is not null)
+                {
+                    logger.LogInformation(
+                        "{Path}: repository {Repo} @ commit {Commit} ({Branch})",
+                        path,
+                        extract.Repository.RemoteBaseUrl,
+                        extract.Repository.CommitSha,
+                        extract.Repository.BranchName);
+                }
             }
             catch (Exception ex)
             {

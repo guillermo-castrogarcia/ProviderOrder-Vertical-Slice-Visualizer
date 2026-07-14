@@ -68,7 +68,7 @@ internal partial class Program
         // resolves handlers by reflection, call-stack analysis cannot reach them from the application-service side, so
         // those slices are detected the same way the module detects MediatR slices: match the command type at the
         // IMarinator.SendAsync call site against the Marinator IRequestHandler that handles it.
-        var marinatorRequestHandlers = await sln.FindMarinatorRequestHandlersAsync(repository, cancellationToken).ToListAsync(cancellationToken);
+        var marinatorRequestHandlers = await sln.FindMarinatorRequestHandlersAsync(cancellationToken).ToListAsync(cancellationToken);
         var marinatorCalls = await sln.FindMarinatorCallsAsync(cancellationToken).ToListAsync(cancellationToken);
 
         var marinatorRequestHandlerAndCallTuples = marinatorRequestHandlers
@@ -98,7 +98,8 @@ internal partial class Program
                 dbColumnAccesses: dbColumnAccesses)
             .ToList();
 
-        var serialized = System.Text.Json.JsonSerializer.Serialize(verticalSlices);
+        var extract = BuildExtract(verticalSlices, repository);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(extract);
         await File.WriteAllTextAsync(
             path: Path.Combine(OutputDirectory(), "monolith.verticalslices.json"),
             contents: serialized);
@@ -121,7 +122,7 @@ internal partial class Program
         var kafkaCalls = await sln.FindKafkaCallsAsync(cancellationToken).ToListAsync(cancellationToken);
 
         var controllerActions = (await sln.FindControllerActionsAsync(cancellationToken).ToListAsync(cancellationToken)).ToHashSet().ToList();
-        var mediatrRequestHandlers = await sln.FindMediatrRequestHandlersAsync(repository, cancellationToken).ToListAsync(cancellationToken);
+        var mediatrRequestHandlers = await sln.FindMediatrRequestHandlersAsync(cancellationToken).ToListAsync(cancellationToken);
         var mediatorCalls = await sln.FindMediatorCallsAsync(cancellationToken).ToListAsync(cancellationToken);
         var mediatorRequestHandlerAndCallTuples = mediatrRequestHandlers
             .Join(
@@ -149,7 +150,8 @@ internal partial class Program
                 dbColumnAccesses: dbColumnAccesses)
             .ToList();
 
-        var serialized = System.Text.Json.JsonSerializer.Serialize(verticalSlices.ToList());
+        var extract = BuildExtract(verticalSlices, repository);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(extract);
         await File.WriteAllTextAsync(
             path: Path.Combine(OutputDirectory(), "module.verticalslices.json"),
             contents: serialized);
@@ -283,6 +285,92 @@ internal partial class Program
                 KafkaPayloads: relevantKafkaCalls.Select(e => e.PayloadType).ToList(),
                 WebApiServiceClientCalls: relevantWebApiServiceClientCalls,
                 DbColumnAccesses: relevantDbColumnAccesses);
+        }
+    }
+
+    // Relativizes every captured source location against the repo root and wraps the slices with the
+    // once-per-file repository/commit header, so links are commit-pinned and no absolute local path leaks.
+    private static VerticalSliceExtract BuildExtract(IReadOnlyList<VerticalSlice> slices, Repository repository)
+    {
+        RelativizeSourceLocations(slices, repository.Info.WorkingDirectory);
+        var sourceRepository = GitHubSourceRepository.Create(repository)
+            ?? throw new InvalidOperationException(
+                $"Could not resolve an 'origin' remote for repository at {repository.Info.WorkingDirectory}.");
+        return new VerticalSliceExtract(sourceRepository, slices);
+    }
+
+    // Rewrites every SourceLocation.Path reachable from a slice from its absolute capture-time path to a
+    // repo-relative, forward-slashed path. Idempotent: the IsPathRooted guard skips already-relativized
+    // locations, which matters because the same wrapper instance can be shared across slices.
+    private static void RelativizeSourceLocations(IReadOnlyList<VerticalSlice> slices, string repoRoot)
+    {
+        foreach (var slice in slices)
+        {
+            Relativize(slice.PrimaryPort.ImplementationClass, repoRoot);
+            Relativize(slice.PrimaryPort.ImplementationMethod, repoRoot);
+            if (slice.PrimaryPort is MediatrRequestHandler mediatrHandler)
+            {
+                Relativize(mediatrHandler.RequestType, repoRoot);
+            }
+
+            foreach (var adapter in slice.PrimaryAdapters)
+            {
+                Relativize(adapter.ClassTypeSymbol, repoRoot);
+                Relativize(adapter.EntryMethod, repoRoot);
+                Relativize(adapter.PayloadType, repoRoot);
+            }
+
+            foreach (var payload in slice.NServiceBusPayloads)
+            {
+                Relativize(payload, repoRoot);
+            }
+
+            foreach (var payload in slice.KafkaPayloads)
+            {
+                Relativize(payload, repoRoot);
+            }
+
+            foreach (var call in slice.WebApiServiceClientCalls)
+            {
+                Relativize(call.Method, repoRoot);
+                Relativize(call.Signature, repoRoot);
+            }
+        }
+    }
+
+    private static void Relativize(SourceLocation? location, string repoRoot)
+    {
+        if (location is not null && Path.IsPathRooted(location.Path))
+        {
+            location.Path = Path.GetRelativePath(repoRoot, location.Path).Replace('\\', '/');
+        }
+    }
+
+    private static void Relativize(NamedTypeSymbol? type, string repoRoot) =>
+        Relativize(type?.SourceLocation, repoRoot);
+
+    private static void Relativize(NamedMethodSymbol? method, string repoRoot)
+    {
+        if (method is null)
+        {
+            return;
+        }
+
+        Relativize(method.SourceLocation, repoRoot);
+        Relativize(method.Signature, repoRoot);
+    }
+
+    private static void Relativize(MethodSignature? signature, string repoRoot)
+    {
+        if (signature is null)
+        {
+            return;
+        }
+
+        Relativize(signature.ReturnValue, repoRoot);
+        foreach (var parameter in signature.Parameters)
+        {
+            Relativize(parameter, repoRoot);
         }
     }
 }

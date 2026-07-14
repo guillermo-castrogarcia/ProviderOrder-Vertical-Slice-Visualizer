@@ -6,7 +6,6 @@ using InvocationExpressionSyntax = Microsoft.CodeAnalysis.CSharp.Syntax.Invocati
 namespace Dg.ProviderOrder.Mokumentation;
 
 using ArchitectureBricks;
-using LibGit2Sharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Schema;
 
@@ -20,12 +19,15 @@ public static class RoslynDgExtensions
     public static NamedTypeSymbol ToNamedTypeSymbol(this IParameterSymbol symbol) =>
         new(
             symbol.Name,
-            FullName.FromValue(symbol.ToDisplayString()));
+            FullName.FromValue(symbol.ToDisplayString()),
+            // Link to the parameter's type declaration, not the parameter itself.
+            symbol.Type.ToSourceLocation());
 
     public static NamedTypeSymbol ToNamedTypeSymbol(this ITypeSymbol symbol) =>
         new(
             symbol.Name,
-            FullName.FromValue(symbol.ToDisplayString()));
+            FullName.FromValue(symbol.ToDisplayString()),
+            symbol.ToSourceLocation());
 
     public static NamedMethodSymbol ToNamedMethodSymbol(this IMethodSymbol symbol) => new(
         Name: symbol.Name,
@@ -38,7 +40,30 @@ public static class RoslynDgExtensions
                     miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes))),
         Signature: new MethodSignature(
             ReturnValue: symbol.ReturnsVoid ? null : symbol.ReturnType.ToNamedTypeSymbol(),
-            Parameters: symbol.Parameters.Select(ToNamedTypeSymbol).ToList()));
+            Parameters: symbol.Parameters.Select(ToNamedTypeSymbol).ToList()),
+        SourceLocation: symbol.ToSourceLocation());
+
+    // Resolves the source file + line range that declares a symbol, as an ABSOLUTE path (the path is
+    // rewritten to repo-relative in a post-pass once the repo root is known). Returns null for symbols
+    // with no source declaration (e.g. types defined in referenced assemblies / NuGet packages), so
+    // those simply carry no link. Lines are 1-based to match GitHub's #L anchors.
+    public static SourceLocation? ToSourceLocation(this ISymbol symbol)
+    {
+        var location = symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax().GetLocation()
+            ?? symbol.Locations.FirstOrDefault(l => l.IsInSource);
+        if (location is null || !location.IsInSource)
+        {
+            return null;
+        }
+
+        var lineSpan = location.GetLineSpan();
+        return new SourceLocation
+        {
+            Path = lineSpan.Path,
+            StartLine = lineSpan.StartLinePosition.Line + 1,
+            EndLine = lineSpan.EndLinePosition.Line + 1,
+        };
+    }
 
     public static async Task<Document?> FindDocumentAsync(this IMethodSymbol methodSymbol, Solution solution, CancellationToken cancellationToken = default)
     {
@@ -65,27 +90,23 @@ public static class RoslynDgExtensions
     // MediatR (module) request handlers. See FindRequestHandlersAsync for the shared implementation.
     public static IAsyncEnumerable<MediatrRequestHandler> FindMediatrRequestHandlersAsync(
         this Solution solution,
-        Repository repository,
         CancellationToken cancellationToken) =>
         solution.FindRequestHandlersAsync(
             MediatorConstants.RequestHandlerInterfaceFullNamesithArity,
             MediatorConstants.RequestHandlerInterfaceName,
             MediatorConstants.RequestHandlerMethodName,
             PrimaryPortType.MediatrRequestHandler,
-            repository,
             cancellationToken);
 
     // Marinator (monolith) command handlers. Marinator is MediatR-shaped, so this reuses the exact same detection.
     public static IAsyncEnumerable<MediatrRequestHandler> FindMarinatorRequestHandlersAsync(
         this Solution solution,
-        Repository repository,
         CancellationToken cancellationToken) =>
         solution.FindRequestHandlersAsync(
             MarinatorConstants.RequestHandlerInterfaceFullNamesWithArity,
             MarinatorConstants.RequestHandlerInterfaceName,
             MarinatorConstants.RequestHandlerMethodName,
             PrimaryPortType.MarinatorRequestHandler,
-            repository,
             cancellationToken);
 
     // Finds every class implementing a MediatR/Marinator-style request-handler interface and turns each handled
@@ -97,7 +118,6 @@ public static class RoslynDgExtensions
         string requestHandlerInterfaceName,
         string requestHandlerMethodName,
         PrimaryPortType primaryPortType,
-        Repository repository,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var interfaceTypes = new List<INamedTypeSymbol>();
@@ -141,16 +161,13 @@ public static class RoslynDgExtensions
 
                 if (handlerMethod != null)
                 {
-                    var document = await handlerMethod.FindDocumentAsync(solution, cancellationToken);
-                    var versionControlInfo = document is null
-                        ? null
-                        : AzureDevOpsVersionControlInfo.Create(document, repository);
+                    // The source link for the port now rides on the enriched ImplementationClass /
+                    // ImplementationMethod wrappers (see ToNamedTypeSymbol/ToNamedMethodSymbol).
                     yield return new MediatrRequestHandler(
                         implementation.ToNamedTypeSymbol(),
                         handlerMethod.ToNamedMethodSymbol(),
                         handlerMethod.Parameters[0].Type.ToNamedTypeSymbol(),
-                        PrimaryPortType: primaryPortType,
-                        versionControlInfo);
+                        PrimaryPortType: primaryPortType);
                 }
             }
         }
