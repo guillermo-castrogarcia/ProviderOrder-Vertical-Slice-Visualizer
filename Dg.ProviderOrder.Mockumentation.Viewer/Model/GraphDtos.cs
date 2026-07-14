@@ -32,7 +32,10 @@ public sealed record GraphEdgeDto(
     string Kind,
     /// <summary>Simple name of the payload travelling along the arrow (the event/command type, or the
     /// web method for web edges) — shown on hover.</summary>
-    string Payload);
+    string Payload,
+    /// <summary>Commit-pinned GitHub URL to the payload type's source definition; null when the type has
+    /// no known source (e.g. a type from a referenced package) — the arrow is then a plain hover target.</summary>
+    string? SourceUrl = null);
 
 public sealed record GraphDto(
     IReadOnlyList<GraphNodeDto> Nodes,

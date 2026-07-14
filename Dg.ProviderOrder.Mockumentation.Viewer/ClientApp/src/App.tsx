@@ -150,7 +150,7 @@ function buildElements(graph: Graph): { nodes: SliceNode[]; edges: Edge[] } {
       source: e.source,
       target: e.target,
       type: 'payload',
-      data: { payload: e.payload },
+      data: { payload: e.payload, sourceUrl: e.sourceUrl ?? null },
       style: { stroke: color, strokeWidth: 2 },
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
     };

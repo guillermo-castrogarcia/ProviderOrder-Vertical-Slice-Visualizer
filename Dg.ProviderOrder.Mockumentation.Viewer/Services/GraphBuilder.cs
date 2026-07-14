@@ -18,8 +18,14 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
     /// </summary>
     public GraphDto Build(IEnumerable<string> filePaths)
     {
-        var slices = LoadAndMerge(filePaths);
+        var (slices, repoBySliceId) = LoadAndMerge(filePaths);
         var byId = slices.ToDictionary(s => s.Id);
+
+        // payload full name -> commit-pinned GitHub URL of the type's source definition. A payload's
+        // SourceLocation path is relative to the repository the slice was extracted from, so it must be
+        // paired with that slice's repository. Producers (which publish the message) are scanned first so
+        // their definition wins over a consumer's view of the same type.
+        var sourceUrlByPayload = BuildPayloadSourceUrls(slices, repoBySliceId);
 
         // payload full name -> ids of slices that produce (send) it downstream.
         var producersByPayload = new Dictionary<string, HashSet<string>>();
@@ -42,7 +48,7 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
         // Per slice, which of its incoming adapters are satisfied by a known upstream slice.
         var fedAdapters = new HashSet<PrimaryAdapterDto>(ReferenceEqualityComparer.Instance);
 
-        void AddEdge(string source, string target, string adapterType, string kind, string discriminator)
+        void AddEdge(string source, string target, string adapterType, string kind, string discriminator, string? sourceUrl = null)
         {
             if (source == target)
             {
@@ -51,7 +57,7 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
             var key = $"{source}{target}{kind}{discriminator}";
             if (edgeKeys.Add(key))
             {
-                edges.Add(new GraphEdgeDto($"e{edges.Count}", source, target, adapterType, kind, SimpleName(discriminator)));
+                edges.Add(new GraphEdgeDto($"e{edges.Count}", source, target, adapterType, kind, SimpleName(discriminator), sourceUrl));
             }
         }
 
@@ -67,9 +73,10 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
                 }
                 if (producersByPayload.TryGetValue(payload, out var producers))
                 {
+                    sourceUrlByPayload.TryGetValue(payload, out var payloadUrl);
                     foreach (var producerId in producers.Where(id => id != consumer.Id))
                     {
-                        AddEdge(producerId, consumer.Id, ProviderOrderDomain.AdapterTypeName(adapter.AdapterType), "Messaging", payload);
+                        AddEdge(producerId, consumer.Id, ProviderOrderDomain.AdapterTypeName(adapter.AdapterType), "Messaging", payload, payloadUrl);
                         fedAdapters.Add(adapter);
                     }
                 }
@@ -139,9 +146,11 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
         return new GraphDto(nodes, edges);
     }
 
-    private List<VerticalSliceDto> LoadAndMerge(IEnumerable<string> filePaths)
+    private (List<VerticalSliceDto> Slices, Dictionary<string, SourceRepositoryDto> RepoBySliceId) LoadAndMerge(
+        IEnumerable<string> filePaths)
     {
         var merged = new Dictionary<string, VerticalSliceDto>();
+        var repoBySliceId = new Dictionary<string, SourceRepositoryDto>();
         foreach (var path in filePaths)
         {
             if (!File.Exists(path))
@@ -151,6 +160,7 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
             }
 
             List<VerticalSliceDto>? slices;
+            SourceRepositoryDto? repository;
             try
             {
                 var bytes = File.ReadAllBytes(path);
@@ -163,6 +173,7 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
                 }
                 var extract = JsonSerializer.Deserialize<VerticalSliceExtractDto>(bytes.AsSpan(start), JsonOptions);
                 slices = extract?.Slices;
+                repository = extract?.Repository;
                 if (extract is not null)
                 {
                     logger.LogInformation(
@@ -187,12 +198,60 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
             foreach (var slice in slices)
             {
                 // First occurrence wins; a slice in both datasets is deduped by primary-port id.
-                merged.TryAdd(slice.Id, slice);
+                if (merged.TryAdd(slice.Id, slice) && repository is not null)
+                {
+                    repoBySliceId[slice.Id] = repository;
+                }
             }
             logger.LogInformation("Loaded {Count} slices from {Path}", slices.Count, path);
         }
 
-        return merged.Values.ToList();
+        return (merged.Values.ToList(), repoBySliceId);
+    }
+
+    // Maps each payload type's full name to a commit-pinned GitHub URL for its source definition. A payload
+    // symbol's SourceLocation path is repo-relative, so it is composed with the repository of the slice that
+    // references it. Producer-published payloads (NServiceBus/Kafka outgoing) are scanned first so a
+    // publisher's definition wins over a consumer's incoming-adapter view of the same type; the first
+    // non-null source location per payload name is kept.
+    private static Dictionary<string, string> BuildPayloadSourceUrls(
+        IEnumerable<VerticalSliceDto> slices, IReadOnlyDictionary<string, SourceRepositoryDto> repoBySliceId)
+    {
+        var urls = new Dictionary<string, string>();
+        var sliceList = slices as ICollection<VerticalSliceDto> ?? slices.ToList();
+
+        void Record(VerticalSliceDto slice, NamedSymbolDto? payload)
+        {
+            if (payload?.SourceLocation is null)
+            {
+                return;
+            }
+            var fullName = payload.FullName.Value;
+            if (urls.ContainsKey(fullName) || !repoBySliceId.TryGetValue(slice.Id, out var repo))
+            {
+                return;
+            }
+            urls[fullName] = repo.BlobUrl(payload.SourceLocation);
+        }
+
+        // Pass 1: producers (outgoing payloads) define the message contract — prefer their location.
+        foreach (var slice in sliceList)
+        {
+            foreach (var payload in slice.NServiceBusPayloads.Concat(slice.KafkaPayloads))
+            {
+                Record(slice, payload);
+            }
+        }
+        // Pass 2: consumers' incoming adapter payloads, as a fallback for types no producer published.
+        foreach (var slice in sliceList)
+        {
+            foreach (var adapter in slice.PrimaryAdapters)
+            {
+                Record(slice, adapter.PayloadType);
+            }
+        }
+
+        return urls;
     }
 
     private static int FindJsonStart(byte[] bytes)

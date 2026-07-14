@@ -29,6 +29,8 @@ export interface GraphEdge {
   kind: 'Messaging' | 'Web';
   /** Simple name of the payload travelling along the arrow — shown on hover. */
   payload: string;
+  /** Commit-pinned GitHub URL to the payload type's source; null when the type has no known source. */
+  sourceUrl?: string | null;
 }
 
 export interface Graph {
