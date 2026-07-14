@@ -7,8 +7,17 @@ public sealed record VerticalSlice(
     PrimaryPort PrimaryPort,
     IReadOnlyList<NamedTypeSymbol> NServiceBusPayloads,
     IReadOnlyList<NamedTypeSymbol> KafkaPayloads,
-    IReadOnlyList<SerializableWebApiServiceClientCall> WebApiServiceClientCalls)
+    IReadOnlyList<SerializableWebApiServiceClientCall> WebApiServiceClientCalls,
+    IReadOnlyList<DbColumnAccess> DbColumnAccesses)
 {
+    [JsonIgnore]
+    public IReadOnlyList<DbColumnAccess> ColumnReads =>
+        DbColumnAccesses.Where(e => e.AccessKind == DbAccessKind.Read).ToList();
+
+    [JsonIgnore]
+    public IReadOnlyList<DbColumnAccess> ColumnWrites =>
+        DbColumnAccesses.Where(e => e.AccessKind == DbAccessKind.Write).ToList();
+
     [JsonIgnore]
     public IReadOnlySet<NamedTypeSymbol> OutgoingPayloads => NServiceBusPayloads
         .Union(KafkaPayloads)

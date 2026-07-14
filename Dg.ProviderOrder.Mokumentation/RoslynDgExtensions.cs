@@ -8,6 +8,7 @@ namespace Dg.ProviderOrder.Mokumentation;
 using ArchitectureBricks;
 using LibGit2Sharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Schema;
 
 public static class RoslynDgExtensions
 {
@@ -711,6 +712,184 @@ public static class RoslynDgExtensions
                 }
             }
         }
+    }
+
+    // Finds every database column a piece of code reads or writes, attributed (later, in FindVerticalSlices) to the
+    // vertical slice(s) whose handler reaches it. This is ORM-agnostic: it does not care whether the access goes through
+    // EF Core (module) or Deblazer (monolith). An "entity" is simply any type the dbml catalog knows a table for, a
+    // "column" is a property that maps to a dbml <Column>, and read-vs-write is decided by the syntactic position of the
+    // access. Attribution reuses the same reverse-call-graph machinery as the NServiceBus/Kafka finders.
+    //
+    // Known best-effort limits (documented for callers): a fully-materialized entity read (a query with no projection)
+    // is only captured through the columns its mapping code actually touches, not expanded to every column; an update
+    // records only the statically-assigned columns (runtime change-tracking may persist a different set); value-object
+    // column renames are handled only for the cases listed in DbmlSchemaCatalog.
+    public static async Task<IReadOnlyList<DbColumnAccessCall>> FindDbColumnAccessesAsync(
+        this Solution solution,
+        DbmlSchemaCatalog catalog,
+        CancellationToken cancellationToken)
+    {
+        // Containing method symbol -> the distinct column accesses lexically inside it.
+        var accessesByMethod = new Dictionary<IMethodSymbol, HashSet<DbColumnAccess>>(SymbolEqualityComparer.Default);
+        var columnNames = catalog.AllColumnNames;
+
+        foreach (var project in solution.Projects)
+        {
+            var compilation = await project.GetCompilationAsync(cancellationToken);
+            if (compilation is null)
+            {
+                continue;
+            }
+
+            foreach (var syntaxTree in compilation.SyntaxTrees)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var root = await syntaxTree.GetRootAsync(cancellationToken);
+                var semanticModel = compilation.GetSemanticModelOrNull(syntaxTree);
+                if (semanticModel is null)
+                {
+                    continue;
+                }
+
+                // Member accesses (x.Col): a write when it is the target of an assignment/increment, a read otherwise.
+                // Pre-filter on the member name against the set of all column names to avoid resolving the semantic
+                // model for the millions of member accesses (`.ToList()`, `.Where(...)`, ...) that cannot be columns.
+                foreach (var memberAccess in root.DescendantNodes().OfType<MemberAccessExpressionSyntax>())
+                {
+                    var memberName = memberAccess.Name.Identifier.Text;
+                    if (!columnNames.Contains(memberName))
+                    {
+                        continue;
+                    }
+
+                    if (semanticModel.GetTypeInfo(memberAccess.Expression, cancellationToken).Type is not INamedTypeSymbol receiverType)
+                    {
+                        continue;
+                    }
+
+                    var table = catalog.TryResolveTable(receiverType);
+                    if (table is null)
+                    {
+                        continue;
+                    }
+
+                    var column = catalog.ResolveColumn(table, memberName);
+                    if (column is null)
+                    {
+                        catalog.RecordUnresolvedColumn(table, memberName);
+                        continue;
+                    }
+
+                    var kind = IsWritePosition(memberAccess) ? DbAccessKind.Write : DbAccessKind.Read;
+                    AddAccess(accessesByMethod, semanticModel, memberAccess, new DbColumnAccess(table.Database, table.Schema, table.Table, column, kind));
+                }
+
+                // Object initializers (new Entity { Col = ... }): each initialized column is a write.
+                foreach (var creation in root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>())
+                {
+                    if (creation.Initializer is null)
+                    {
+                        continue;
+                    }
+
+                    var createdTypeName = creation.Type switch
+                    {
+                        IdentifierNameSyntax id => id.Identifier.Text,
+                        QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
+                        GenericNameSyntax generic => generic.Identifier.Text,
+                        _ => null,
+                    };
+                    if (createdTypeName is null || !catalog.IsCandidateEntityTypeName(createdTypeName))
+                    {
+                        continue;
+                    }
+
+                    if (semanticModel.GetTypeInfo(creation, cancellationToken).Type is not INamedTypeSymbol createdType)
+                    {
+                        continue;
+                    }
+
+                    var table = catalog.TryResolveTable(createdType);
+                    if (table is null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var assignment in creation.Initializer.Expressions.OfType<AssignmentExpressionSyntax>())
+                    {
+                        if (assignment.Left is not IdentifierNameSyntax propertyName)
+                        {
+                            continue;
+                        }
+
+                        var column = catalog.ResolveColumn(table, propertyName.Identifier.Text);
+                        if (column is null)
+                        {
+                            catalog.RecordUnresolvedColumn(table, propertyName.Identifier.Text);
+                            continue;
+                        }
+
+                        AddAccess(accessesByMethod, semanticModel, creation, new DbColumnAccess(table.Database, table.Schema, table.Table, column, DbAccessKind.Write));
+                    }
+                }
+            }
+        }
+
+        // Attribute each method's accesses via its reverse call graph, generated once per method (a method typically
+        // hosts many column accesses). Stopping at the mediator dispatcher keeps a write inside a handler attributed to
+        // that handler's slice, exactly like the NServiceBus/Kafka finders.
+        var results = new List<DbColumnAccessCall>();
+        foreach (var (method, accesses) in accessesByMethod)
+        {
+            var callStacks = await method
+                .GenerateCallStacksAsync(solution, CallerFilterStoppingAtMediatorHandlers, CallStackMustBeWithinProviderOrderAfter5LevelsFilter.Default, cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            results.Add(new DbColumnAccessCall(method.ToNamedMethodSymbol(), callStacks, accesses.ToList()));
+        }
+
+        return results;
+    }
+
+    private static bool IsWritePosition(ExpressionSyntax expression) =>
+        expression.Parent switch
+        {
+            AssignmentExpressionSyntax assignment => assignment.Left == expression,
+            PostfixUnaryExpressionSyntax => true,
+            PrefixUnaryExpressionSyntax prefix => prefix.OperatorToken.Text is "++" or "--",
+            _ => false,
+        };
+
+    private static void AddAccess(
+        Dictionary<IMethodSymbol, HashSet<DbColumnAccess>> accessesByMethod,
+        SemanticModel semanticModel,
+        SyntaxNode node,
+        DbColumnAccess access)
+    {
+        var method = ResolveContainingMethod(semanticModel, node);
+        if (method is null)
+        {
+            return;
+        }
+
+        if (!accessesByMethod.TryGetValue(method, out var set))
+        {
+            set = new HashSet<DbColumnAccess>();
+            accessesByMethod[method] = set;
+        }
+
+        set.Add(access);
+    }
+
+    // The nearest enclosing ordinary member (method/accessor/constructor), deliberately climbing out of lambdas and
+    // local functions so an access inside a `.Where(x => x.Col == ...)` lambda is attributed to the repository method
+    // that hosts the query — which is what the reverse call graph connects to a slice's handler.
+    private static IMethodSymbol? ResolveContainingMethod(SemanticModel semanticModel, SyntaxNode node)
+    {
+        var declaration = node.FirstAncestorOrSelf<SyntaxNode>(n =>
+            n is MethodDeclarationSyntax or AccessorDeclarationSyntax or ConstructorDeclarationSyntax);
+
+        return declaration is null ? null : semanticModel.GetDeclaredSymbol(declaration) as IMethodSymbol;
     }
 
     private static async IAsyncEnumerable<CallStack> GenerateCallStacksRecursiveAsync(

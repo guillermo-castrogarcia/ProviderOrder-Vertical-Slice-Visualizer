@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using Dg.ProviderOrder.Mokumentation;
 using Dg.ProviderOrder.Mokumentation.ArchitectureBricks;
+using Dg.ProviderOrder.Mokumentation.Schema;
 using LibGit2Sharp;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
@@ -84,11 +85,17 @@ internal partial class Program
 
         var primaryAdapters = FindPrimaryAdapters(marinatorRequestHandlerAndCallTuples, controllerActions, nserviceBusHandlers, kafkaHandlers).ToList();
 
+        var dbSchemaCatalog = DbmlSchemaCatalog.LoadFromRepositories(monolithRepositoryPath);
+        Console.WriteLine($"[monolith] dbml catalog: {dbSchemaCatalog.DatabaseCount} databases, {dbSchemaCatalog.TableCount} tables");
+        var dbColumnAccesses = await sln.FindDbColumnAccessesAsync(dbSchemaCatalog, cancellationToken);
+        dbSchemaCatalog.ReportUnresolved("monolith");
+
         var verticalSlices = FindVerticalSlices(
                 primaryAdapters,
                 nserviceBusCalls,
                 kafkaCalls,
-                webApiServiceClientCalls: providerOrderInterfaceServiceClientCalls.Union(providerOrderServiceClientCalls).ToList())
+                webApiServiceClientCalls: providerOrderInterfaceServiceClientCalls.Union(providerOrderServiceClientCalls).ToList(),
+                dbColumnAccesses: dbColumnAccesses)
             .ToList();
 
         var serialized = System.Text.Json.JsonSerializer.Serialize(verticalSlices);
@@ -129,11 +136,17 @@ internal partial class Program
 
         var primaryAdapters = FindPrimaryAdapters(mediatorRequestHandlerAndCallTuples, controllerActions, nserviceBusHandlers, kafkaHandlers).ToList();
 
+        var dbSchemaCatalog = DbmlSchemaCatalog.LoadFromRepositories(moduleRepositoryPath);
+        Console.WriteLine($"[module] dbml catalog: {dbSchemaCatalog.DatabaseCount} databases, {dbSchemaCatalog.TableCount} tables");
+        var dbColumnAccesses = await sln.FindDbColumnAccessesAsync(dbSchemaCatalog, cancellationToken);
+        dbSchemaCatalog.ReportUnresolved("module");
+
         var verticalSlices = FindVerticalSlices(
                 primaryAdapters,
                 nserviceBusCalls,
                 kafkaCalls,
-                webApiServiceClientCalls: providerOrderInterfaceServiceClientCalls.Union(providerOrderServiceClientCalls).ToList())
+                webApiServiceClientCalls: providerOrderInterfaceServiceClientCalls.Union(providerOrderServiceClientCalls).ToList(),
+                dbColumnAccesses: dbColumnAccesses)
             .ToList();
 
         var serialized = System.Text.Json.JsonSerializer.Serialize(verticalSlices.ToList());
@@ -230,7 +243,8 @@ internal partial class Program
         IReadOnlyList<PrimaryAdapter> primaryAdapters,
         IReadOnlyList<NServiceBusCall> nServiceBusCalls,
         IReadOnlyList<KafkaCall> kafkaCalls,
-        IReadOnlyList<WebApiServiceClientCall> webApiServiceClientCalls)
+        IReadOnlyList<WebApiServiceClientCall> webApiServiceClientCalls,
+        IReadOnlyList<DbColumnAccessCall> dbColumnAccesses)
     {
         var primaryAdaptersBySamePrimaryPort = primaryAdapters.ToLookup(e => e.CalledPort);
         foreach (var primaryAdaptersOfSamePrimaryPort in primaryAdaptersBySamePrimaryPort)
@@ -252,12 +266,23 @@ internal partial class Program
                 .DistinctBy(e => e.Signature)
                 .ToList();
 
+            // A DB access belongs to this slice when the handler either performs it directly (the access sits in the
+            // handler method itself) or transitively reaches the method that performs it (the handler appears as a
+            // calling symbol somewhere in that method's reverse call stacks).
+            var relevantDbColumnAccesses = dbColumnAccesses
+                .Where(c => c.ContainingMethod.Equals(primaryPort.ImplementationMethod)
+                    || c.CallStacks.Any(cs => cs.ContainsMethodAsCallingSymbol(primaryPort.ImplementationMethod)))
+                .SelectMany(e => e.Accesses)
+                .Distinct()
+                .ToList();
+
             yield return new VerticalSlice(
                 PrimaryAdapters: primaryAdaptersOfSamePrimaryPort.ToList(),
                 PrimaryPort: primaryPort,
                 NServiceBusPayloads: relevantNServiceBusCalls.Select(e => e.PayloadType).ToList(),
                 KafkaPayloads: relevantKafkaCalls.Select(e => e.PayloadType).ToList(),
-                WebApiServiceClientCalls: relevantWebApiServiceClientCalls);
+                WebApiServiceClientCalls: relevantWebApiServiceClientCalls,
+                DbColumnAccesses: relevantDbColumnAccesses);
         }
     }
 }
