@@ -18,15 +18,15 @@ import '@xyflow/react/dist/style.css';
 import './App.css';
 
 import { fetchGraph } from './api';
-import { computeLayout, NODE_H, NODE_W } from './layout';
+import { computeLayout, nodeSize } from './layout';
 import { adapterColor, categoryColor, categoryLabel, sideAccent } from './theme';
 import { productBorder, productFill, productIndex } from './products';
-import { EllipseNode } from './components/EllipseNode';
+import { EllipseNode, inHandleId, outHandleId } from './components/EllipseNode';
 import { ProductBox } from './components/ProductBox';
 import { SideBox } from './components/SideBox';
 import { PayloadEdge } from './components/PayloadEdge';
 import { CheckboxTree, type SideGroup } from './components/CheckboxTree';
-import type { AdapterCategory, Graph, Side, SliceNodeData } from './types';
+import type { AdapterCategory, AdapterType, Graph, Side, SliceNodeData } from './types';
 
 type SliceNode = Node<SliceNodeData, 'slice'>;
 
@@ -42,6 +42,7 @@ const BOX_PAD_TOP = 46;
 const SIDE_BOX_PAD = 54;
 const SIDE_BOX_PAD_TOP = 92;
 const isBoxId = (id?: string) => !!id && (id.startsWith('productbox::') || id.startsWith('sidebox::'));
+const noop = () => {};
 
 interface Bounds {
   minX: number;
@@ -50,15 +51,15 @@ interface Bounds {
   maxY: number;
 }
 
-function extend(map: Map<string, Bounds>, key: string, x: number, y: number): void {
+function extend(map: Map<string, Bounds>, key: string, x: number, y: number, w: number, h: number): void {
   const b = map.get(key);
   if (!b) {
-    map.set(key, { minX: x, minY: y, maxX: x + NODE_W, maxY: y + NODE_H });
+    map.set(key, { minX: x, minY: y, maxX: x + w, maxY: y + h });
   } else {
     b.minX = Math.min(b.minX, x);
     b.minY = Math.min(b.minY, y);
-    b.maxX = Math.max(b.maxX, x + NODE_W);
-    b.maxY = Math.max(b.maxY, y + NODE_H);
+    b.maxX = Math.max(b.maxX, x + w);
+    b.maxY = Math.max(b.maxY, y + h);
   }
 }
 
@@ -68,14 +69,15 @@ function extend(map: Map<string, Bounds>, key: string, x: number, y: number): vo
  * application side (all Commands / all Queries) and an inner box per (side, product). Side boxes are
  * emitted first and given the lowest z so they sit behind the product boxes, which sit behind the slices.
  */
-function computeBoxNodes(sliceNodes: SliceNode[]): Node[] {
+function computeBoxNodes(sliceNodes: SliceNode[], expanded: ReadonlySet<string>): Node[] {
   const sideBounds = new Map<string, Bounds>(); // key: side
   const productBounds = new Map<string, Bounds>(); // key: `${side}::${product}`
   for (const n of sliceNodes) {
     if (n.hidden) continue;
     const { x, y } = n.position;
-    extend(sideBounds, n.data.side, x, y);
-    extend(productBounds, `${n.data.side}::${n.data.product}`, x, y);
+    const { w, h } = nodeSize(n.id, expanded);
+    extend(sideBounds, n.data.side, x, y, w, h);
+    extend(productBounds, `${n.data.side}::${n.data.product}`, x, y, w, h);
   }
 
   const sideBoxes: Node[] = SIDES.filter((s) => sideBounds.has(s)).map((side) => {
@@ -140,6 +142,9 @@ function buildElements(graph: Graph): { nodes: SliceNode[]; edges: Edge[] } {
       product: n.product,
       externalIncoming: n.externalIncoming,
       adapterCategory: n.adapterCategory,
+      detail: n.detail,
+      expanded: false,
+      onCollapse: noop,
     },
   }));
 
@@ -176,14 +181,50 @@ function Flow({ graph }: { graph: Graph }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<SliceNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { fitView } = useReactFlow();
 
   const tree = useMemo(() => buildTree(graph), [graph]);
 
+  const collapse = useCallback((id: string) => {
+    setExpanded((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const toggleExpanded = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   // Product bounding boxes are derived from the live slice positions and rendered behind them, so they
   // re-fit on every drag and every animation frame. onNodesChange only carries slice-node changes.
-  const boxNodes = useMemo(() => computeBoxNodes(nodes), [nodes]);
-  const rfNodes = useMemo<Node[]>(() => [...boxNodes, ...nodes], [boxNodes, nodes]);
+  const boxNodes = useMemo(() => computeBoxNodes(nodes, expanded), [nodes, expanded]);
+  // Inject the live expanded flag + collapse callback + intended size/z onto each slice node. The base
+  // node state keeps only positions (mutated by the animation); expansion is layered on here per render.
+  const sliceRfNodes = useMemo<Node[]>(
+    () =>
+      nodes.map((n) => {
+        const isExpanded = expanded.has(n.id);
+        const { w, h } = nodeSize(n.id, expanded);
+        return {
+          ...n,
+          width: w,
+          height: h,
+          zIndex: isExpanded ? 5 : 2,
+          data: { ...n.data, expanded: isExpanded, onCollapse: collapse },
+        };
+      }),
+    [nodes, expanded, collapse],
+  );
+  const rfNodes = useMemo<Node[]>(() => [...boxNodes, ...sliceRfNodes], [boxNodes, sliceRfNodes]);
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => onNodesChange(changes.filter((c) => !('id' in c) || !isBoxId(c.id)) as NodeChange<SliceNode>[]),
     [onNodesChange],
@@ -207,7 +248,7 @@ function Flow({ graph }: { graph: Graph }) {
   const animateLayout = useCallback(
     (hiddenSet: Set<string>) => {
       const visibleGraphNodes = graph.nodes.filter((n) => !hiddenSet.has(keyOf(n.side, n.product)));
-      const target = computeLayout(visibleGraphNodes, graph.edges);
+      const target = computeLayout(visibleGraphNodes, graph.edges, expanded);
       const prevHidden = prevHiddenRef.current;
       prevHiddenRef.current = new Set(hiddenSet);
 
@@ -260,7 +301,7 @@ function Flow({ graph }: { graph: Graph }) {
       };
       animRef.current = requestAnimationFrame(step);
     },
-    [graph, setNodes],
+    [graph, setNodes, expanded],
   );
 
   // Initial build.
@@ -269,10 +310,12 @@ function Flow({ graph }: { graph: Graph }) {
     setNodes(built.nodes);
     setEdges(built.edges);
     setHidden(new Set());
+    setExpanded(new Set());
     prevHiddenRef.current = new Set();
   }, [graph, setNodes, setEdges]);
 
-  // Animate a re-pack whenever the hidden set changes.
+  // Animate a re-pack whenever the hidden set OR the expanded set changes (the latter recreates
+  // animateLayout, since it now closes over `expanded`, so this effect re-runs and neighbours reflow).
   useEffect(() => {
     animateLayout(hidden);
   }, [hidden, animateLayout]);
@@ -295,6 +338,48 @@ function Flow({ graph }: { graph: Graph }) {
       es.map((e) => ({ ...e, hidden: hiddenNodeIds.has(e.source) || hiddenNodeIds.has(e.target) })),
     );
   }, [hiddenNodeIds, setEdges]);
+
+  // Which sub-box handles each node exposes when expanded (must mirror EllipseNode's rendered handles).
+  const nodeHandles = useMemo(() => {
+    const m = new Map<string, { inc: Set<string>; out: Set<string> }>();
+    for (const n of graph.nodes) {
+      const inc = new Set<string>();
+      for (const a of n.detail.adapters) inc.add(inHandleId(a.adapterType));
+      const out = new Set<string>();
+      if (n.detail.nsbOut.length) out.add(outHandleId('NServiceBus'));
+      if (n.detail.kafkaOut.length) out.add(outHandleId('Kafka'));
+      if (n.detail.webRequests.length) out.add(outHandleId('Web'));
+      m.set(n.id, { inc, out });
+    }
+    return m;
+  }, [graph]);
+
+  // adapterType lives on the graph edge, not the React Flow edge — index it for handle routing.
+  const edgeMeta = useMemo(() => {
+    const m = new Map<string, { source: string; target: string; adapterType: AdapterType }>();
+    for (const e of graph.edges) m.set(e.id, { source: e.source, target: e.target, adapterType: e.adapterType });
+    return m;
+  }, [graph]);
+
+  // When an endpoint is expanded, route the edge to the matching sub-box handle (the incoming adapter of
+  // the payload's type on the consumer, the outgoing box that publishes it on the producer); otherwise use
+  // the node-centre fallback handle. Only assigns a handle that actually exists on that node.
+  useEffect(() => {
+    setEdges((es) =>
+      es.map((e) => {
+        const meta = edgeMeta.get(e.id);
+        if (!meta) return e;
+        const wantIn = expanded.has(meta.target) ? inHandleId(meta.adapterType) : null;
+        const wantOut = expanded.has(meta.source)
+          ? outHandleId(meta.adapterType as 'NServiceBus' | 'Kafka' | 'Web')
+          : null;
+        const targetHandle = wantIn && nodeHandles.get(meta.target)?.inc.has(wantIn) ? wantIn : null;
+        const sourceHandle = wantOut && nodeHandles.get(meta.source)?.out.has(wantOut) ? wantOut : null;
+        if (e.sourceHandle === sourceHandle && e.targetHandle === targetHandle) return e;
+        return { ...e, sourceHandle, targetHandle };
+      }),
+    );
+  }, [expanded, edgeMeta, nodeHandles, setEdges]);
 
   const toggleProduct = useCallback((key: string, visible: boolean) => {
     setHidden((prev) => {
@@ -366,6 +451,9 @@ function Flow({ graph }: { graph: Graph }) {
             edgeTypes={edgeTypes}
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
+            onNodeDoubleClick={(_, node) => {
+              if (node.type === 'slice') toggleExpanded(node.id);
+            }}
             fitView
             minZoom={0.05}
             maxZoom={2}

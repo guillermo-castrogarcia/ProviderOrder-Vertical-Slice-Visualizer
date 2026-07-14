@@ -11,7 +11,50 @@ public sealed record GraphNodeDto(
     IReadOnlyList<ExternalIncomingDto> ExternalIncoming,
     /// <summary>Colour category for the node: the single adapter type of all its primary adapters
     /// ("Web"/"NServiceBus"/"Kafka"/"Other"), or "Mixed" when it has adapters of several types.</summary>
-    string AdapterCategory);
+    string AdapterCategory,
+    /// <summary>The slice's internals, shown when the node is expanded: incoming adapters, handling
+    /// service, DB reads/writes, and outgoing messages/requests, each with a commit-pinned source link
+    /// where one exists.</summary>
+    SliceDetailDto Detail);
+
+/// <summary>The internals of a slice, rendered inside the expanded node.</summary>
+public sealed record SliceDetailDto(
+    IReadOnlyList<AdapterDto> Adapters,
+    HandlerDto? Handler,
+    /// <summary>The MediatR/Marinator request/command the handler receives (derived from the handler's
+    /// first parameter); null for non-mediated ports.</summary>
+    LinkDto? MediatorPayload,
+    IReadOnlyList<DbAccessDto> Reads,
+    IReadOnlyList<DbAccessDto> Writes,
+    /// <summary>Outgoing NServiceBus events/commands published by the slice (name + source link).</summary>
+    IReadOnlyList<LinkDto> NsbOut,
+    /// <summary>Outgoing Kafka events published by the slice (name; no link yet — a topic in the future).</summary>
+    IReadOnlyList<LinkDto> KafkaOut,
+    /// <summary>Outgoing web-service-client calls — the generated "{Controller}_{Action}" method names.</summary>
+    IReadOnlyList<string> WebRequests);
+
+/// <summary>An incoming primary adapter: a Kafka consumer, NSB receiver, or controller action.</summary>
+public sealed record AdapterDto(
+    /// <summary>"Web"/"NServiceBus"/"Kafka"/"Other" — the UI maps Web to "Controller Action".</summary>
+    string AdapterType,
+    string ClassName,
+    string? ClassUrl,
+    /// <summary>The entry method (controller action / handler method) name.</summary>
+    string EntryMethod,
+    string? EntryMethodUrl);
+
+/// <summary>The handling service (the class implementing the primary port) and the handler method it runs.</summary>
+public sealed record HandlerDto(
+    string ClassName,
+    string? ClassUrl,
+    string MethodName,
+    string? MethodUrl);
+
+/// <summary>A named thing with an optional commit-pinned source link.</summary>
+public sealed record LinkDto(string Name, string? Url);
+
+/// <summary>A single database column read or written by the slice.</summary>
+public sealed record DbAccessDto(string Database, string Schema, string Table, string Column);
 
 /// <summary>A free-standing incoming arrow: external input into a slice from outside any known slice.</summary>
 public sealed record ExternalIncomingDto(

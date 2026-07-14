@@ -189,6 +189,228 @@ input[type='checkbox'] {
   height: 6px;
 }
 
+/* Hover preselect: a dotted bounding box around a collapsed slice before it is picked/expanded. */
+.slice-node--collapsed:hover::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+/* ---- Expanded slice node ---- */
+.slice-node--expanded {
+  box-sizing: border-box;
+  background: var(--panel);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 11px;
+  /* Visible so external-incoming stubs can sit just left of the adapter cards; inner regions clip
+     their own content, and the constrained grid never overflows, so nothing else spills out. */
+  overflow: visible;
+}
+.exp-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 15px 15px 0 0; /* match the node's rounded top corners (node is overflow:visible) */
+}
+.exp-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.exp-slice-label {
+  flex: 1;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.exp-collapse {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.exp-collapse:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.exp-body {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  /* minmax(0, …) keeps the middle column from growing past its share when its content has long,
+     unbreakable text — otherwise the grid would overflow the fixed-width node to the right. */
+  grid-template-columns: 210px minmax(0, 1fr) 210px;
+  gap: 10px;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.exp-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0; /* allow the column to shrink to its track so children wrap instead of overflowing */
+}
+.exp-col--out {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.exp-col--mid {
+  align-items: stretch;
+}
+
+/* Sub-boxes */
+.exp-adapter,
+.exp-handler,
+.exp-out,
+.exp-data {
+  box-sizing: border-box;
+  position: relative; /* positioning context so a sub-box's React Flow handle anchors to its own edge */
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.exp-handler {
+  align-self: center;
+  width: 78%;
+  text-align: center;
+  border-left-width: 1px;
+  border-color: var(--accent);
+}
+.exp-box-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.exp-primary {
+  display: block;
+  font-weight: 600;
+  word-break: break-word;
+  overflow-wrap: anywhere; /* break very long single tokens so they wrap instead of overflowing */
+  line-height: 1.25;
+}
+.exp-secondary {
+  display: block;
+  color: var(--muted);
+  word-break: break-word;
+}
+.exp-link {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+.exp-link:hover {
+  text-decoration: underline;
+}
+.exp-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 10px;
+}
+
+/* Mediator / Marinator payload on the adapter → service connector. */
+.exp-mediator {
+  align-self: center;
+  text-align: center;
+  max-width: 92%;
+}
+.exp-mediator-label {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.exp-mediator-name {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+/* Read / Written data */
+.exp-data-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.exp-data {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.exp-data--read {
+  border-left-color: #38bdf8;
+}
+.exp-data--write {
+  border-left-color: #f59e0b;
+}
+.exp-data-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+.exp-db-name {
+  font-weight: 700;
+}
+.exp-schema-name {
+  padding-left: 8px;
+  color: var(--muted);
+}
+.exp-table-name {
+  padding-left: 16px;
+  font-weight: 600;
+}
+.exp-column {
+  padding-left: 26px;
+  color: var(--muted);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* External-incoming stub: a short arrow just left of an adapter card whose input comes from outside
+   any known slice (so there is no inter-slice edge to draw). */
+.exp-adapter-stub {
+  position: absolute;
+  left: -26px;
+  top: 50%;
+  transform: translateY(-50%);
+  overflow: visible;
+}
+
 /* ---- Product bounding box (swimlane) ---- */
 .product-box {
   width: 100%;

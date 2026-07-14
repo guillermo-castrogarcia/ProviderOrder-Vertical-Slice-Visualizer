@@ -34,7 +34,7 @@ public sealed class PrimaryAdapterDto
     public NamedSymbolDto ClassTypeSymbol { get; set; } = new();
     public NamedSymbolDto EntryMethod { get; set; } = new();
 
-    /// <summary>0 = Web, 1 = Messaging, 2 = Other (matches PrimaryAdapterType enum).</summary>
+    /// <summary>0 = Web, 1 = NServiceBus, 2 = Kafka, 3 = Other (matches PrimaryAdapterType enum; see ProviderOrderDomain.AdapterTypeName).</summary>
     public int AdapterType { get; set; }
 
     /// <summary>The incoming payload type; null for web adapters (they carry no message payload).</summary>
@@ -48,7 +48,13 @@ public sealed class MethodSignatureDto
 
 public sealed class ImplementationMethodDto
 {
+    /// <summary>The handler method's simple name (e.g. "Handle"/"HandleAsync").</summary>
+    public string Name { get; set; } = string.Empty;
+    public FullNameDto FullName { get; set; } = new();
     public MethodSignatureDto Signature { get; set; } = new();
+
+    /// <summary>Link back to the handler method's source; null when it has no source location.</summary>
+    public SourceLocationDto? SourceLocation { get; set; }
 }
 
 public sealed class PrimaryPortDto
@@ -61,6 +67,9 @@ public sealed class PrimaryPortDto
     /// <summary>0 = MediatrRequestHandler, 1 = MarinatorRequestHandler, 2 = MonolithApplicationService.</summary>
     public int PrimaryPortType { get; set; }
 
+    /// <summary>The class that implements the port (the handling service). Carries a SourceLocation.</summary>
+    public NamedSymbolDto ImplementationClass { get; set; } = new();
+
     /// <summary>The handler method. For MediatR/Marinator handlers its first parameter is the handled request/command.</summary>
     public ImplementationMethodDto ImplementationMethod { get; set; } = new();
 }
@@ -70,6 +79,18 @@ public sealed class WebApiServiceClientCallDto
     public NamedSymbolDto Method { get; set; } = new();
 }
 
+/// <summary>A single database column read or written by a slice. AccessKind mirrors DbAccessKind (0 = Read, 1 = Write).</summary>
+public sealed class DbColumnAccessDto
+{
+    public string Database { get; set; } = string.Empty;
+    public string Schema { get; set; } = string.Empty;
+    public string Table { get; set; } = string.Empty;
+    public string Column { get; set; } = string.Empty;
+
+    /// <summary>0 = Read, 1 = Write (matches DbAccessKind enum).</summary>
+    public int AccessKind { get; set; }
+}
+
 public sealed class VerticalSliceDto
 {
     public List<PrimaryAdapterDto> PrimaryAdapters { get; set; } = [];
@@ -77,6 +98,7 @@ public sealed class VerticalSliceDto
     public List<NamedSymbolDto> NServiceBusPayloads { get; set; } = [];
     public List<NamedSymbolDto> KafkaPayloads { get; set; } = [];
     public List<WebApiServiceClientCallDto> WebApiServiceClientCalls { get; set; } = [];
+    public List<DbColumnAccessDto> DbColumnAccesses { get; set; } = [];
 
     public string Id => PrimaryPort.FullName.Value;
 }

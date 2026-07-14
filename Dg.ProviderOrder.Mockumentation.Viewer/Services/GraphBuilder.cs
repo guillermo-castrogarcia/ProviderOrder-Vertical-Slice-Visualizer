@@ -130,13 +130,15 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
             }
 
             var fullName = slice.PrimaryPort.FullName;
+            repoBySliceId.TryGetValue(slice.Id, out var repo);
             nodes.Add(new GraphNodeDto(
                 Id: slice.Id,
                 Label: HandledCommandLabel(slice.PrimaryPort) ?? fullName.LastToken,
                 Side: ProviderOrderDomain.SideName(slice.PrimaryPort.ApplicationSide),
                 Product: ProviderOrderDomain.FindProduct(fullName.Value),
                 ExternalIncoming: external,
-                AdapterCategory: AdapterCategory(slice)));
+                AdapterCategory: AdapterCategory(slice),
+                Detail: BuildDetail(slice, repo)));
         }
 
         logger.LogInformation(
@@ -291,6 +293,58 @@ public sealed class GraphBuilder(ILogger<GraphBuilder> logger)
         var commandType = firstParameter.FullName.LastToken.Split(' ')[0];
         return string.IsNullOrWhiteSpace(commandType) ? null : commandType;
     }
+
+    // ---- Expanded-view detail --------------------------------------------------------------------
+
+    // Commit-pinned GitHub URL for a symbol's source, or null when the symbol/repo/location is missing.
+    private static string? Url(SourceRepositoryDto? repo, NamedSymbolDto? symbol) =>
+        repo is not null && symbol?.SourceLocation is not null ? repo.BlobUrl(symbol.SourceLocation) : null;
+
+    private static string? Url(SourceRepositoryDto? repo, SourceLocationDto? location) =>
+        repo is not null && location is not null ? repo.BlobUrl(location) : null;
+
+    // Builds everything shown inside an expanded slice node. Links resolve against the repository the
+    // slice was extracted from (source paths are repo-relative); a null repo/location just yields no link.
+    private static SliceDetailDto BuildDetail(VerticalSliceDto slice, SourceRepositoryDto? repo)
+    {
+        var adapters = slice.PrimaryAdapters
+            .Select(a => new AdapterDto(
+                AdapterType: ProviderOrderDomain.AdapterTypeName(a.AdapterType),
+                ClassName: a.ClassTypeSymbol.Name,
+                ClassUrl: Url(repo, a.ClassTypeSymbol),
+                EntryMethod: a.EntryMethod.Name,
+                EntryMethodUrl: Url(repo, a.EntryMethod)))
+            .ToList();
+
+        var port = slice.PrimaryPort;
+        HandlerDto? handler = string.IsNullOrEmpty(port.ImplementationClass.Name) && string.IsNullOrEmpty(port.ImplementationMethod.Name)
+            ? null
+            : new HandlerDto(
+                ClassName: port.ImplementationClass.Name,
+                ClassUrl: Url(repo, port.ImplementationClass),
+                MethodName: port.ImplementationMethod.Name,
+                MethodUrl: Url(repo, port.ImplementationMethod.SourceLocation));
+
+        LinkDto? mediatorPayload = null;
+        var commandLabel = HandledCommandLabel(port);
+        if (commandLabel is not null)
+        {
+            var firstParameter = port.ImplementationMethod.Signature.Parameters.FirstOrDefault();
+            mediatorPayload = new LinkDto(commandLabel, Url(repo, firstParameter));
+        }
+
+        var reads = slice.DbColumnAccesses.Where(d => d.AccessKind == 0).Select(ToDbAccess).ToList();
+        var writes = slice.DbColumnAccesses.Where(d => d.AccessKind == 1).Select(ToDbAccess).ToList();
+
+        var nsbOut = slice.NServiceBusPayloads.Select(p => new LinkDto(p.Name, Url(repo, p))).ToList();
+        var kafkaOut = slice.KafkaPayloads.Select(p => new LinkDto(p.Name, Url(repo, p))).ToList();
+        var webRequests = slice.WebApiServiceClientCalls.Select(c => c.Method.Name).ToList();
+
+        return new SliceDetailDto(adapters, handler, mediatorPayload, reads, writes, nsbOut, kafkaOut, webRequests);
+    }
+
+    private static DbAccessDto ToDbAccess(DbColumnAccessDto d) =>
+        new(d.Database, d.Schema, d.Table, d.Column);
 
     // Colour category for a slice's node: the single adapter type shared by all its primary adapters,
     // or "Mixed" when the slice exposes adapters of several different types.

@@ -10,6 +10,52 @@ export interface ExternalIncoming {
   payload: string;
 }
 
+/** A named thing with an optional commit-pinned GitHub source link. */
+export interface Link {
+  name: string;
+  url?: string | null;
+}
+
+/** An incoming primary adapter: a Kafka consumer, NSB receiver, or controller action. */
+export interface Adapter {
+  adapterType: AdapterType;
+  className: string;
+  classUrl?: string | null;
+  /** Entry method — the controller action / handler method. */
+  entryMethod: string;
+  entryMethodUrl?: string | null;
+}
+
+/** The handling service (class implementing the port) and the handler method it runs. */
+export interface Handler {
+  className: string;
+  classUrl?: string | null;
+  methodName: string;
+  methodUrl?: string | null;
+}
+
+/** A single database column read or written by the slice. */
+export interface DbAccess {
+  database: string;
+  schema: string;
+  table: string;
+  column: string;
+}
+
+/** The internals of a slice, shown when its node is expanded. */
+export interface SliceDetail {
+  adapters: Adapter[];
+  handler?: Handler | null;
+  /** The MediatR/Marinator request/command the handler receives; null for non-mediated ports. */
+  mediatorPayload?: Link | null;
+  reads: DbAccess[];
+  writes: DbAccess[];
+  nsbOut: Link[];
+  kafkaOut: Link[];
+  /** Outgoing web-service-client "{Controller}_{Action}" method names. */
+  webRequests: string[];
+}
+
 export interface GraphNode {
   id: string;
   label: string;
@@ -19,6 +65,8 @@ export interface GraphNode {
   externalIncoming: ExternalIncoming[];
   /** Colour category: the slice's single adapter type, or "Mixed" when it has several. */
   adapterCategory: AdapterCategory;
+  /** The slice's internals, rendered when the node is expanded. */
+  detail: SliceDetail;
 }
 
 export interface GraphEdge {
@@ -45,5 +93,10 @@ export interface SliceNodeData {
   product: string;
   externalIncoming: ExternalIncoming[];
   adapterCategory: AdapterCategory;
+  detail: SliceDetail;
+  /** True when the node is showing its expanded internals; injected per-render from App state. */
+  expanded: boolean;
+  /** Collapses this node back to the ellipse; injected per-render from App state. */
+  onCollapse: (id: string) => void;
   [key: string]: unknown;
 }
