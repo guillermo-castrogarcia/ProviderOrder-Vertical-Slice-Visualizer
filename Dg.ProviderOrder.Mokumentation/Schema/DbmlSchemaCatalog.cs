@@ -126,6 +126,12 @@ public sealed class DbmlSchemaCatalog
                 continue;
             }
 
+            // The dbml `Member` is the name of the generated query/DbSet accessor for the table (e.g. `ProviderOrders`
+            // for `dbo.ProviderOrder`). We register it as a lookup key so the syntactic query-root recovery can map a
+            // Deblazer producer call like `dbWrite.ProviderOrders()` back to its table when the entity type failed to
+            // bind (see TryResolveTableByName / RoslynDgExtensions.GetProducerEntityName).
+            var memberName = (string?)tableElement.Attribute("Member");
+
             var lastDot = qualifiedName.LastIndexOf('.');
             var schema = lastDot >= 0 ? qualifiedName[..lastDot] : ((string?)databaseElement.Attribute("SchemaName") ?? string.Empty);
             var tableShortName = lastDot >= 0 ? qualifiedName[(lastDot + 1)..] : qualifiedName;
@@ -143,9 +149,14 @@ public sealed class DbmlSchemaCatalog
             var tableInfo = new TableInfo(databaseIdentifier, schema, tableShortName, columns);
 
             // Register under both the dbml Type name (Deblazer entity class name) and the bare table short name; the
-            // entity resolver also tries the EF `DbModel`-stripped form against these keys.
+            // entity resolver also tries the EF `DbModel`-stripped form against these keys. The Member name (the
+            // generated accessor, usually the plural) is registered too so the query-root recovery can resolve it.
             tablesByKey[typeName] = tableInfo;
             tablesByKey[tableShortName] = tableInfo;
+            if (!string.IsNullOrEmpty(memberName))
+            {
+                tablesByKey[memberName] = tableInfo;
+            }
         }
 
         return new DatabaseInfo(databaseNamespace, tablesByKey);

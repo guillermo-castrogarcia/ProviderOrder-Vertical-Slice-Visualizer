@@ -794,19 +794,25 @@ public static class RoslynDgExtensions
                         continue;
                     }
 
-                    if (semanticModel.GetTypeInfo(memberAccess.Expression, cancellationToken).Type is not INamedTypeSymbol receiverType)
-                    {
-                        continue;
-                    }
+                    var receiverExpression = memberAccess.Expression;
+                    var receiverType = semanticModel.GetTypeInfo(receiverExpression, cancellationToken).Type;
 
-                    var table = catalog.TryResolveTable(receiverType);
-                    if (table is null && receiverType.TypeKind == TypeKind.Error)
+                    var table = receiverType is INamedTypeSymbol namedReceiver ? catalog.TryResolveTable(namedReceiver) : null;
+                    if (table is null && (receiverType is null || receiverType.TypeKind == TypeKind.Error))
                     {
-                        // The receiver's entity type is not in the compilation (generated code absent) — fall back to
-                        // matching by its simple name. The name survives on the error symbol when it came from an
-                        // explicit type (e.g. `dbContext.Set<OrderResponseEdiDataDbModel>()`); it is lost ("?") when it
-                        // was purely inferred (e.g. a Deblazer `WhereDb(x => ...)` lambda over an unresolved query root).
-                        table = catalog.TryResolveTableByName(receiverType.Name, contextNamespaces);
+                        // The receiver's entity type is not in the compilation (the Deblazer/EF entity classes are
+                        // code-generated and absent when the solution is opened without a full build), so it binds to a
+                        // Roslyn Error type. Recover the table without a bound symbol, in order of confidence:
+                        //   1) the error symbol's own name, when it survived (explicit `dbContext.Set<XDbModel>()`);
+                        //   2) failing that, from the receiver SYNTAX — a navigation hop (`e.OrderExport.OrderId`) names
+                        //      its target table, and a query lambda parameter (`WhereDb(p => p.Col)`) resolves to the
+                        //      entity produced at the root of its query chain (see ResolveErrorTypedReceiverTable).
+                        // Every candidate name is validated against the dbml catalog, so a non-entity name simply
+                        // resolves to nothing rather than being misattributed.
+                        table = receiverType is INamedTypeSymbol errorNamed
+                            ? catalog.TryResolveTableByName(errorNamed.Name, contextNamespaces)
+                            : null;
+                        table ??= ResolveErrorTypedReceiverTable(receiverExpression, catalog, contextNamespaces);
                     }
                     if (table is null)
                     {
@@ -934,6 +940,134 @@ public static class RoslynDgExtensions
 
         return declaration is null ? null : semanticModel.GetDeclaredSymbol(declaration) as IMethodSymbol;
     }
+
+    // Recovers the table for an error-typed member-access receiver purely from syntax, used when the entity type did
+    // not bind (generated ORM code absent from the design-time compilation) and its error symbol carried no usable
+    // name. Two shapes are handled, both matched by name against the dbml catalog (so a stray non-entity name simply
+    // resolves to nothing rather than being misattributed):
+    //   * a navigation hop `<expr>.Nav.Column` — `Nav` is the target entity/table name (e.g. `e.OrderExport.OrderId`);
+    //   * a query lambda parameter `Producer()...WhereDb(p => p.Column)` — `p` is the element type of the query, which
+    //     is the entity produced at the chain root (Deblazer `dbWrite.ProviderOrders()` / EF `dbContext.Set<T>()`),
+    //     advanced by any `Join<Entity>()` operator that precedes the lambda.
+    private static DbmlSchemaCatalog.TableInfo? ResolveErrorTypedReceiverTable(
+        ExpressionSyntax receiver,
+        DbmlSchemaCatalog catalog,
+        IReadOnlyCollection<string> contextNamespaces)
+    {
+        switch (receiver)
+        {
+            case MemberAccessExpressionSyntax navigation:
+                return catalog.TryResolveTableByName(navigation.Name.Identifier.Text, contextNamespaces);
+            case IdentifierNameSyntax parameterReference:
+                var entityName = TryGetQueryElementEntityName(parameterReference);
+                return entityName is null ? null : catalog.TryResolveTableByName(entityName, contextNamespaces);
+            default:
+                return null;
+        }
+    }
+
+    // For an identifier that is a query lambda's parameter (`p` in `.WhereDb(p => ...)`), returns the name of the entity
+    // that parameter iterates: the entity produced at the root of the query chain, advanced by any `Join<Entity>()`
+    // between the root and this lambda. Returns null when the identifier is not such a parameter or the root producer
+    // cannot be identified. Purely syntactic; the caller validates the returned name against the dbml catalog.
+    private static string? TryGetQueryElementEntityName(IdentifierNameSyntax parameterReference)
+    {
+        var parameterName = parameterReference.Identifier.Text;
+
+        // Nearest enclosing lambda that declares this parameter name (handles nested query lambdas — the inner one wins).
+        LambdaExpressionSyntax? lambda = null;
+        foreach (var ancestor in parameterReference.Ancestors())
+        {
+            if (ancestor is SimpleLambdaExpressionSyntax simple && simple.Parameter.Identifier.Text == parameterName)
+            {
+                lambda = simple;
+                break;
+            }
+
+            if (ancestor is ParenthesizedLambdaExpressionSyntax paren
+                && paren.ParameterList.Parameters.Any(p => p.Identifier.Text == parameterName))
+            {
+                lambda = paren;
+                break;
+            }
+        }
+
+        if (lambda?.Parent is not ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax lambdaInvocation } })
+        {
+            return null;
+        }
+
+        // Collect the invocation chain from this lambda's operator down to the producer at the root of the chain.
+        var chain = new List<InvocationExpressionSyntax>();
+        var current = lambdaInvocation;
+        while (true)
+        {
+            chain.Add(current);
+            if (current.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner })
+            {
+                current = inner;
+                continue;
+            }
+
+            break;
+        }
+
+        chain.Reverse(); // producer first, this lambda's operator last
+
+        var entityName = GetProducerEntityName(chain[0]);
+        if (entityName is null)
+        {
+            return null;
+        }
+
+        // Apply the joins that occur before this lambda's operator: each `Join<Entity>()` re-roots the element type, so
+        // the lambda parameter iterates the most recently joined entity rather than the original producer entity.
+        for (var i = 1; i < chain.Count - 1; i++)
+        {
+            var methodName = GetInvokedMethodName(chain[i]);
+            if (methodName is not null && methodName.StartsWith("Join", StringComparison.Ordinal) && methodName.Length > "Join".Length)
+            {
+                entityName = methodName["Join".Length..];
+            }
+        }
+
+        return entityName;
+    }
+
+    // The entity a query-root producer yields: the type argument of an EF `Set<T>()`/`Query<T>()`, otherwise the
+    // producer method's own name (Deblazer generates one query method per table, named after the table's dbml `Member`,
+    // e.g. `ProviderOrders()` -> the `ProviderOrder` table).
+    private static string? GetProducerEntityName(InvocationExpressionSyntax producer)
+    {
+        var nameSyntax = (producer.Expression as MemberAccessExpressionSyntax)?.Name
+            ?? producer.Expression as SimpleNameSyntax;
+
+        if (nameSyntax is GenericNameSyntax generic)
+        {
+            if (generic.Identifier.Text is "Set" or "Query" && generic.TypeArgumentList.Arguments.Count == 1)
+            {
+                return SimpleTypeName(generic.TypeArgumentList.Arguments[0]);
+            }
+
+            // A generic Deblazer producer such as `ProviderOrderItemProducts<int>()`: the entity is the method name, the
+            // type argument is the key type.
+            return generic.Identifier.Text;
+        }
+
+        return nameSyntax?.Identifier.Text;
+    }
+
+    private static string? GetInvokedMethodName(InvocationExpressionSyntax invocation) =>
+        ((invocation.Expression as MemberAccessExpressionSyntax)?.Name
+            ?? invocation.Expression as SimpleNameSyntax)?.Identifier.Text;
+
+    private static string? SimpleTypeName(TypeSyntax type) => type switch
+    {
+        IdentifierNameSyntax identifier => identifier.Identifier.Text,
+        GenericNameSyntax generic => generic.Identifier.Text,
+        QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
+        _ => null,
+    };
 
     private static async IAsyncEnumerable<CallStack> GenerateCallStacksRecursiveAsync(
         this IMethodSymbol method,
