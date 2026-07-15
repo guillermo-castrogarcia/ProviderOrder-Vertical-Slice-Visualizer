@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps, type Node } from '@xyflow/react';
 import type { Adapter, AdapterType, DbAccess, Link, SliceNodeData } from '../types';
 import { adapterColor, adapterLabel, categoryColor, categoryLabel, nodeOutline } from '../theme';
-import { EXP_H, EXP_W, NODE_H, NODE_W } from '../layout';
+import { ADAPTER_HEADING, EXP_H, EXP_W, NODE_H, NODE_W } from '../layout';
 
 type SliceNode = Node<SliceNodeData, 'slice'>;
 
@@ -98,16 +98,15 @@ function CollapsedNode({ data }: { data: SliceNodeData }) {
 
 // ---- Expanded: the slice internals, laid out like the mockup ---------------------------------
 
-/** Heading shown above an incoming adapter, by its type. */
-const adapterHeading: Record<AdapterType, string> = {
-  Kafka: 'Kafka Consumer',
-  NServiceBus: 'NSB Receiver',
-  Web: 'Controller Action',
-  Other: 'Adapter',
-};
-
 function ExpandedNode({ id, data }: { id: string; data: SliceNodeData }) {
   const d = data.detail;
+  const width = data.dims?.width ?? EXP_W;
+  const height = data.dims?.height ?? EXP_H;
+  // Fixed left/right columns sized to their content; the middle takes the rest. Sub-boxes then hold their
+  // text on one line (see App.css nowrap rules) because the columns are wide enough for it.
+  const gridTemplateColumns = data.dims
+    ? `${data.dims.leftW}px minmax(0, 1fr) ${data.dims.rightW}px`
+    : undefined;
 
   // Put the incoming handle on the FIRST adapter card of each type (handle ids must be unique per node).
   const seenIn = new Set<string>();
@@ -127,7 +126,7 @@ function ExpandedNode({ id, data }: { id: string; data: SliceNodeData }) {
   }
 
   return (
-    <div className="slice-node slice-node--expanded" style={{ width: EXP_W, height: EXP_H }}>
+    <div className="slice-node slice-node--expanded" style={{ width, height }}>
       {/* Fallback centre handles for any edge that doesn't resolve to a specific sub-box handle. */}
       <Handle type="target" position={Position.Left} className="node-handle" />
 
@@ -147,7 +146,7 @@ function ExpandedNode({ id, data }: { id: string; data: SliceNodeData }) {
         </button>
       </div>
 
-      <div className="exp-body">
+      <div className="exp-body" style={{ gridTemplateColumns }}>
         {/* Left: incoming adapters */}
         <div className="exp-col exp-col--in">
           {d.adapters.map((a, i) => (
@@ -182,7 +181,19 @@ function ExpandedNode({ id, data }: { id: string; data: SliceNodeData }) {
           )}
 
           {(d.reads.length > 0 || d.writes.length > 0) && (
-            <div className="exp-data-row">
+            <div
+              className="exp-data-row"
+              style={{
+                gridTemplateColumns: data.dims
+                  ? [
+                      d.reads.length > 0 ? `${data.dims.readW}px` : '',
+                      d.writes.length > 0 ? `${data.dims.writeW}px` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
+                  : undefined,
+              }}
+            >
               <DataBox title="Read data" rows={d.reads} kind="read" />
               <DataBox title="Written data" rows={d.writes} kind="write" />
             </div>
@@ -232,7 +243,7 @@ function AdapterCard({
           </g>
         </svg>
       )}
-      <div className="exp-box-title" style={{ color }}>{adapterHeading[adapter.adapterType]}</div>
+      <div className="exp-box-title" style={{ color }}>{ADAPTER_HEADING[adapter.adapterType]}</div>
       <SourceLink url={adapter.classUrl} className="exp-primary">{adapter.className}</SourceLink>
       {adapter.adapterType === 'Web' && adapter.entryMethod && (
         <SourceLink url={adapter.entryMethodUrl} className="exp-secondary">{adapter.entryMethod}()</SourceLink>

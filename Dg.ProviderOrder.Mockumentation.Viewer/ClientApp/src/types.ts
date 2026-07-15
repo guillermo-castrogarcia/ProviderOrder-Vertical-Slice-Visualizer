@@ -96,6 +96,8 @@ export interface SliceNodeData {
   detail: SliceDetail;
   /** True when the node is showing its expanded internals; injected per-render from App state. */
   expanded: boolean;
+  /** Content-driven width + column widths for the expanded card; injected per-render from App state. */
+  dims?: { width: number; height: number; leftW: number; rightW: number; readW: number; writeW: number };
   /** Collapses this node back to the ellipse; injected per-render from App state. */
   onCollapse: (id: string) => void;
   [key: string]: unknown;

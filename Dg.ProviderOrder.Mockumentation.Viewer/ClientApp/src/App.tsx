@@ -18,7 +18,7 @@ import '@xyflow/react/dist/style.css';
 import './App.css';
 
 import { fetchGraph } from './api';
-import { computeLayout, nodeSize } from './layout';
+import { computeExpandedDims, computeLayout, nodeSize, type ExpandedDims } from './layout';
 import { adapterColor, categoryColor, categoryLabel, sideAccent } from './theme';
 import { productBorder, productFill, productIndex } from './products';
 import { EllipseNode, inHandleId, outHandleId } from './components/EllipseNode';
@@ -69,13 +69,17 @@ function extend(map: Map<string, Bounds>, key: string, x: number, y: number, w: 
  * application side (all Commands / all Queries) and an inner box per (side, product). Side boxes are
  * emitted first and given the lowest z so they sit behind the product boxes, which sit behind the slices.
  */
-function computeBoxNodes(sliceNodes: SliceNode[], expanded: ReadonlySet<string>): Node[] {
+function computeBoxNodes(
+  sliceNodes: SliceNode[],
+  expanded: ReadonlySet<string>,
+  dims: ReadonlyMap<string, ExpandedDims>,
+): Node[] {
   const sideBounds = new Map<string, Bounds>(); // key: side
   const productBounds = new Map<string, Bounds>(); // key: `${side}::${product}`
   for (const n of sliceNodes) {
     if (n.hidden) continue;
     const { x, y } = n.position;
-    const { w, h } = nodeSize(n.id, expanded);
+    const { w, h } = nodeSize(n.id, expanded, dims);
     extend(sideBounds, n.data.side, x, y, w, h);
     extend(productBounds, `${n.data.side}::${n.data.product}`, x, y, w, h);
   }
@@ -186,6 +190,13 @@ function Flow({ graph }: { graph: Graph }) {
 
   const tree = useMemo(() => buildTree(graph), [graph]);
 
+  // Content-driven size of each slice's expanded card, so sub-boxes never wrap. Independent of expand
+  // state (it's the card's intrinsic size), so compute it once per graph and reuse.
+  const dims = useMemo(
+    () => new Map(graph.nodes.map((n) => [n.id, computeExpandedDims(n)])),
+    [graph],
+  );
+
   const collapse = useCallback((id: string) => {
     setExpanded((prev) => {
       if (!prev.has(id)) return prev;
@@ -206,23 +217,23 @@ function Flow({ graph }: { graph: Graph }) {
 
   // Product bounding boxes are derived from the live slice positions and rendered behind them, so they
   // re-fit on every drag and every animation frame. onNodesChange only carries slice-node changes.
-  const boxNodes = useMemo(() => computeBoxNodes(nodes, expanded), [nodes, expanded]);
+  const boxNodes = useMemo(() => computeBoxNodes(nodes, expanded, dims), [nodes, expanded, dims]);
   // Inject the live expanded flag + collapse callback + intended size/z onto each slice node. The base
   // node state keeps only positions (mutated by the animation); expansion is layered on here per render.
   const sliceRfNodes = useMemo<Node[]>(
     () =>
       nodes.map((n) => {
         const isExpanded = expanded.has(n.id);
-        const { w, h } = nodeSize(n.id, expanded);
+        const { w, h } = nodeSize(n.id, expanded, dims);
         return {
           ...n,
           width: w,
           height: h,
           zIndex: isExpanded ? 5 : 2,
-          data: { ...n.data, expanded: isExpanded, onCollapse: collapse },
+          data: { ...n.data, expanded: isExpanded, dims: dims.get(n.id), onCollapse: collapse },
         };
       }),
-    [nodes, expanded, collapse],
+    [nodes, expanded, dims, collapse],
   );
   const rfNodes = useMemo<Node[]>(() => [...boxNodes, ...sliceRfNodes], [boxNodes, sliceRfNodes]);
   const handleNodesChange = useCallback(
@@ -248,7 +259,7 @@ function Flow({ graph }: { graph: Graph }) {
   const animateLayout = useCallback(
     (hiddenSet: Set<string>) => {
       const visibleGraphNodes = graph.nodes.filter((n) => !hiddenSet.has(keyOf(n.side, n.product)));
-      const target = computeLayout(visibleGraphNodes, graph.edges, expanded);
+      const target = computeLayout(visibleGraphNodes, graph.edges, expanded, dims);
       const prevHidden = prevHiddenRef.current;
       prevHiddenRef.current = new Set(hiddenSet);
 
@@ -301,7 +312,7 @@ function Flow({ graph }: { graph: Graph }) {
       };
       animRef.current = requestAnimationFrame(step);
     },
-    [graph, setNodes, expanded],
+    [graph, setNodes, expanded, dims],
   );
 
   // Initial build.
@@ -375,8 +386,11 @@ function Flow({ graph }: { graph: Graph }) {
           : null;
         const targetHandle = wantIn && nodeHandles.get(meta.target)?.inc.has(wantIn) ? wantIn : null;
         const sourceHandle = wantOut && nodeHandles.get(meta.source)?.out.has(wantOut) ? wantOut : null;
-        if (e.sourceHandle === sourceHandle && e.targetHandle === targetHandle) return e;
-        return { ...e, sourceHandle, targetHandle };
+        // Draw an edge touching an expanded card ABOVE it (zIndex beats the expanded node's zIndex of 5),
+        // so the arrow visibly reaches its sub-box instead of vanishing behind the card.
+        const zIndex = expanded.has(meta.source) || expanded.has(meta.target) ? 10 : 0;
+        if (e.sourceHandle === sourceHandle && e.targetHandle === targetHandle && e.zIndex === zIndex) return e;
+        return { ...e, sourceHandle, targetHandle, zIndex };
       }),
     );
   }, [expanded, edgeMeta, nodeHandles, setEdges]);
