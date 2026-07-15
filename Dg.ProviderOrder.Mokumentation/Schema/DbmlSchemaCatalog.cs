@@ -183,6 +183,72 @@ public sealed class DbmlSchemaCatalog
         return null;
     }
 
+    // Name-based fallback for when the compiler could not bind the entity type — i.e. its symbol is a Roslyn
+    // *Error* type because the generated entity definition is absent from the (design-time) compilation. This is
+    // common here: the Deblazer/EF entity classes are produced by a code generator (Deblazer.ArtifactsGenerator)
+    // whose output is not present when the solution is opened without a full build, so every reference to an
+    // entity binds to an error type and TryResolveTable (which needs a real namespace) fails. We then match by the
+    // entity's simple name, disambiguating same-named tables in different databases by the `using`/namespace
+    // context of the file the access lives in. Only ever used as a fallback for error types, so a correctly-bound
+    // domain class that merely shares a table's name is never affected.
+    public TableInfo? TryResolveTableByName(string? typeName, IReadOnlyCollection<string> contextNamespaces)
+    {
+        if (string.IsNullOrEmpty(typeName) || typeName == "?")
+        {
+            return null;
+        }
+
+        var keys = CandidateKeys(typeName);
+
+        // 1) Prefer a database whose generated-code namespace is in scope where the access appears (a `using` of it,
+        //    or the file's own namespace living under it). This is what disambiguates identical short names.
+        foreach (var db in _databases)
+        {
+            if (db.DatabaseNamespace.Length == 0)
+            {
+                continue;
+            }
+
+            var inScope = contextNamespaces.Any(ns =>
+                ns == db.DatabaseNamespace
+                || ns.StartsWith(db.DatabaseNamespace + ".", StringComparison.Ordinal)
+                || db.DatabaseNamespace.StartsWith(ns + ".", StringComparison.Ordinal));
+            if (!inScope)
+            {
+                continue;
+            }
+
+            foreach (var key in keys)
+            {
+                if (db.TablesByKey.TryGetValue(key, out var table))
+                {
+                    return table;
+                }
+            }
+        }
+
+        // 2) Otherwise accept the name only if it maps to the same table in every database that has it (no ambiguity).
+        TableInfo? unique = null;
+        foreach (var db in _databases)
+        {
+            foreach (var key in keys)
+            {
+                if (db.TablesByKey.TryGetValue(key, out var table))
+                {
+                    if (unique is not null && unique.FullName != table.FullName)
+                    {
+                        return null; // same name in multiple databases and nothing in scope to choose — refuse to guess
+                    }
+
+                    unique = table;
+                    break;
+                }
+            }
+        }
+
+        return unique;
+    }
+
     // Resolves a C# property name to a column name on the given table (identity mapping by default), or null if the
     // member is not a persisted column (e.g. a navigation/association property or a non-mapped helper member).
     public string? ResolveColumn(TableInfo table, string propertyName)

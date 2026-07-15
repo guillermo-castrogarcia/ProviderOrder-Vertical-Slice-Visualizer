@@ -768,6 +768,21 @@ public static class RoslynDgExtensions
                     continue;
                 }
 
+                // Namespaces in scope for this file (its `using` directives plus its own declared namespaces). Used to
+                // disambiguate the name-based fallback when an entity type failed to bind (see TryResolveTableByName).
+                var contextNamespaces = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var u in root.DescendantNodes().OfType<UsingDirectiveSyntax>())
+                {
+                    if (u.Name is not null)
+                    {
+                        contextNamespaces.Add(u.Name.ToString());
+                    }
+                }
+                foreach (var ns in root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>())
+                {
+                    contextNamespaces.Add(ns.Name.ToString());
+                }
+
                 // Member accesses (x.Col): a write when it is the target of an assignment/increment, a read otherwise.
                 // Pre-filter on the member name against the set of all column names to avoid resolving the semantic
                 // model for the millions of member accesses (`.ToList()`, `.Where(...)`, ...) that cannot be columns.
@@ -785,6 +800,14 @@ public static class RoslynDgExtensions
                     }
 
                     var table = catalog.TryResolveTable(receiverType);
+                    if (table is null && receiverType.TypeKind == TypeKind.Error)
+                    {
+                        // The receiver's entity type is not in the compilation (generated code absent) — fall back to
+                        // matching by its simple name. The name survives on the error symbol when it came from an
+                        // explicit type (e.g. `dbContext.Set<OrderResponseEdiDataDbModel>()`); it is lost ("?") when it
+                        // was purely inferred (e.g. a Deblazer `WhereDb(x => ...)` lambda over an unresolved query root).
+                        table = catalog.TryResolveTableByName(receiverType.Name, contextNamespaces);
+                    }
                     if (table is null)
                     {
                         continue;
@@ -821,12 +844,15 @@ public static class RoslynDgExtensions
                         continue;
                     }
 
-                    if (semanticModel.GetTypeInfo(creation, cancellationToken).Type is not INamedTypeSymbol createdType)
+                    var createdType = semanticModel.GetTypeInfo(creation, cancellationToken).Type as INamedTypeSymbol;
+                    var table = createdType is null ? null : catalog.TryResolveTable(createdType);
+                    if (table is null && (createdType is null || createdType.TypeKind == TypeKind.Error))
                     {
-                        continue;
+                        // Entity type absent from the compilation (generated code) — resolve by the syntactic type name,
+                        // which is always available here (unlike inferred receivers). Recovers `new Entity { Col = ... }`
+                        // writes even when the entity class itself does not bind.
+                        table = catalog.TryResolveTableByName(createdTypeName, contextNamespaces);
                     }
-
-                    var table = catalog.TryResolveTable(createdType);
                     if (table is null)
                     {
                         continue;
